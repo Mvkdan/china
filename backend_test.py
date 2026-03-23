@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 
 class ChinaStudyAPITester:
-    def __init__(self, base_url="https://dossier-flow-2.preview.emergentagent.com"):
+    def __init__(self, base_url="https://supabase-refactor-3.preview.emergentagent.com"):
         self.base_url = base_url
         self.student_token = None
         self.admin_token = None
