@@ -38,7 +38,7 @@ export default function StudentDashboard() {
   const status = STATUS_MAP[application?.status] || STATUS_MAP.Draft;
   const currentStep = status.step;
   const completedSteps = application?.completed_steps || [];
-  const formProgress = Math.round((completedSteps.length / 7) * 100);
+  const formProgress = Math.round((completedSteps.length / 6) * 100);
 
   return (
     <StudentLayout>
@@ -55,8 +55,8 @@ export default function StudentDashboard() {
             </div>
             {application?.university && (
               <div className="text-right">
-                <p className="text-xs font-medium" style={{ color: '#525A61' }}>Université choisie</p>
-                <p className="text-sm font-semibold" style={{ color: '#1A2024' }}>{application.university?.name || "—"}</p>
+                <p className="text-xs font-medium" style={{ color: '#525A61' }}>Université assignée</p>
+                <p className="text-sm font-semibold" style={{ color: '#1A2024' }}>{application.university?.name || "Non assignée"}</p>
               </div>
             )}
           </div>
@@ -113,7 +113,7 @@ export default function StudentDashboard() {
                 <div className="h-2 rounded-full transition-all" style={{ width: `${formProgress}%`, backgroundColor: '#1C3530' }} />
               </div>
             </div>
-            <p className="text-xs mb-4" style={{ color: '#525A61' }}>{completedSteps.length}/7 étapes complétées</p>
+            <p className="text-xs mb-4" style={{ color: '#525A61' }}>{completedSteps.length}/6 étapes complétées</p>
             <Button data-testid="goto-application-btn" onClick={() => navigate("/application")} className="w-full rounded-full text-white" style={{ backgroundColor: '#1C3530' }}>
               {formProgress === 100 ? "Modifier" : "Continuer"} <ArrowRight className="ml-2 h-4 w-4" />
             </Button>

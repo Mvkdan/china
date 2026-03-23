@@ -74,12 +74,20 @@ UNIVERSITIES = [
 ]
 
 DOCUMENT_TYPES = [
-    {"id": "passport_scan", "label": "Scan du Passeport"},
-    {"id": "id_photo", "label": "Photo d'identité (fond blanc)"},
-    {"id": "diploma", "label": "Diplôme"},
-    {"id": "transcripts", "label": "Relevés de notes"},
-    {"id": "criminal_record", "label": "Casier Judiciaire"},
-    {"id": "medical_certificate", "label": "Certificat Médical"},
+    {"id": "passport_scan", "label": "Scan du Passeport", "multiple": False, "group": "identity"},
+    {"id": "id_photo", "label": "Photo d'identité (fond blanc)", "multiple": False, "group": "identity"},
+    {"id": "diploma", "label": "Diplôme", "multiple": True, "group": "diplomas"},
+    {"id": "bulletin_2nde_1", "label": "Bulletin 2nde - 1er trimestre", "multiple": False, "group": "bulletins_2nde"},
+    {"id": "bulletin_2nde_2", "label": "Bulletin 2nde - 2ème trimestre", "multiple": False, "group": "bulletins_2nde"},
+    {"id": "bulletin_2nde_3", "label": "Bulletin 2nde - 3ème trimestre", "multiple": False, "group": "bulletins_2nde"},
+    {"id": "bulletin_1ere_1", "label": "Bulletin 1ère - 1er trimestre", "multiple": False, "group": "bulletins_1ere"},
+    {"id": "bulletin_1ere_2", "label": "Bulletin 1ère - 2ème trimestre", "multiple": False, "group": "bulletins_1ere"},
+    {"id": "bulletin_1ere_3", "label": "Bulletin 1ère - 3ème trimestre", "multiple": False, "group": "bulletins_1ere"},
+    {"id": "bulletin_terminale_1", "label": "Bulletin Terminale - 1er trimestre", "multiple": False, "group": "bulletins_terminale"},
+    {"id": "bulletin_terminale_2", "label": "Bulletin Terminale - 2ème trimestre", "multiple": False, "group": "bulletins_terminale"},
+    {"id": "bulletin_terminale_3", "label": "Bulletin Terminale - 3ème trimestre", "multiple": False, "group": "bulletins_terminale"},
+    {"id": "criminal_record", "label": "Casier Judiciaire", "multiple": False, "group": "other"},
+    {"id": "medical_certificate", "label": "Certificat Médical", "multiple": False, "group": "other"},
 ]
 
 APPLICATION_STATUSES = ["Draft", "Pending_Review", "Awaiting_Payment", "Paid", "Submitted_to_Uni", "Accepted"]
@@ -184,6 +192,35 @@ async def register(req: RegisterRequest):
     token = create_token(user_id, "student")
     return {"token": token, "user": {"id": user_id, "email": req.email.lower(), "role": "student", "first_name": req.first_name, "last_name": req.last_name}}
 
+# ── Admin University Assignment ──
+class UniversityAssignment(BaseModel):
+    university_id: str
+    university_name: str
+    university_city: str
+
+@api_router.put("/admin/students/{student_id}/university")
+async def assign_university(student_id: str, assignment: UniversityAssignment, admin=Depends(require_admin)):
+    app_data = await db.applications.find_one({"user_id": student_id})
+    if not app_data:
+        raise HTTPException(status_code=404, detail="Candidature non trouvée")
+    university = {"id": assignment.university_id, "name": assignment.university_name, "city": assignment.university_city}
+    await db.applications.update_one(
+        {"user_id": student_id},
+        {"$set": {"university": university, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    return {"message": "Université assignée avec succès", "university": university}
+
+# ── Delete document ──
+@api_router.delete("/documents/{doc_id}")
+async def delete_document(doc_id: str, user=Depends(get_current_user)):
+    doc = await db.documents.find_one({"id": doc_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document non trouvé")
+    if doc["user_id"] != user["id"] and user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Accès refusé")
+    await db.documents.delete_one({"id": doc_id})
+    return {"message": "Document supprimé"}
+
 @api_router.post("/auth/login")
 async def login(req: LoginRequest):
     user = await db.users.find_one({"email": req.email.lower()}, {"_id": 0})
@@ -212,7 +249,7 @@ async def update_application(update: ApplicationUpdate, user=Depends(get_current
     if app_data["status"] not in ["Draft", "Pending_Review"]:
         raise HTTPException(status_code=400, detail="La candidature ne peut plus être modifiée à ce stade")
     
-    valid_steps = ["identity", "education", "contacts", "emergency_contact", "financial_guarantor", "family", "university"]
+    valid_steps = ["identity", "education", "contacts", "emergency_contact", "financial_guarantor", "family"]
     if update.step not in valid_steps:
         raise HTTPException(status_code=400, detail=f"Étape invalide: {update.step}")
     
@@ -238,20 +275,23 @@ async def submit_application(user=Depends(get_current_user)):
     if app_data["status"] != "Draft":
         raise HTTPException(status_code=400, detail="La candidature a déjà été soumise")
     
-    required_steps = ["identity", "education", "contacts", "emergency_contact", "financial_guarantor", "family", "university"]
+    required_steps = ["identity", "education", "contacts", "emergency_contact", "financial_guarantor", "family"]
     completed = app_data.get("completed_steps", [])
     missing = [s for s in required_steps if s not in completed]
     if missing:
         raise HTTPException(status_code=400, detail=f"Étapes manquantes: {', '.join(missing)}")
     
-    # Check all required documents are uploaded
+    # Check minimum required documents (passport, id_photo, at least 1 diploma)
     docs = await db.documents.find({"application_id": app_data["id"]}, {"_id": 0}).to_list(100)
     uploaded_types = {d["doc_type"] for d in docs}
-    required_doc_types = {dt["id"] for dt in DOCUMENT_TYPES}
-    missing_docs = required_doc_types - uploaded_types
+    minimum_required = {"passport_scan", "id_photo"}
+    missing_docs = minimum_required - uploaded_types
     if missing_docs:
         labels = [dt["label"] for dt in DOCUMENT_TYPES if dt["id"] in missing_docs]
         raise HTTPException(status_code=400, detail=f"Documents manquants: {', '.join(labels)}")
+    has_diploma = any(d["doc_type"] == "diploma" for d in docs)
+    if not has_diploma:
+        raise HTTPException(status_code=400, detail="Au moins un diplôme est requis")
     
     await db.applications.update_one(
         {"user_id": user["id"]},
@@ -281,8 +321,9 @@ async def upload_document(
     
     result = put_object(storage_path, data, file.content_type or "application/octet-stream")
     
-    # Remove previous document of same type if exists
-    await db.documents.delete_many({"application_id": app_data["id"], "doc_type": doc_type})
+    # For diploma type, allow multiple uploads; for others, replace previous
+    if doc_type != "diploma":
+        await db.documents.delete_many({"application_id": app_data["id"], "doc_type": doc_type})
     
     doc = {
         "id": str(uuid.uuid4()),

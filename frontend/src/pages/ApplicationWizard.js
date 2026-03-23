@@ -19,7 +19,39 @@ const STEPS = [
   { id: "emergency_contact", label: "Urgence", num: 4 },
   { id: "financial_guarantor", label: "Garant", num: 5 },
   { id: "family", label: "Famille", num: 6 },
-  { id: "university", label: "Université", num: 7 },
+];
+
+const COUNTRY_CODES = [
+  { code: "+33", country: "France" },
+  { code: "+225", country: "Côte d'Ivoire" },
+  { code: "+237", country: "Cameroun" },
+  { code: "+221", country: "Sénégal" },
+  { code: "+223", country: "Mali" },
+  { code: "+224", country: "Guinée" },
+  { code: "+228", country: "Togo" },
+  { code: "+229", country: "Bénin" },
+  { code: "+226", country: "Burkina Faso" },
+  { code: "+235", country: "Tchad" },
+  { code: "+242", country: "Congo" },
+  { code: "+243", country: "RD Congo" },
+  { code: "+212", country: "Maroc" },
+  { code: "+216", country: "Tunisie" },
+  { code: "+213", country: "Algérie" },
+  { code: "+261", country: "Madagascar" },
+  { code: "+241", country: "Gabon" },
+  { code: "+240", country: "Guinée Éq." },
+  { code: "+222", country: "Mauritanie" },
+  { code: "+227", country: "Niger" },
+  { code: "+250", country: "Rwanda" },
+  { code: "+257", country: "Burundi" },
+  { code: "+1", country: "USA/Canada" },
+  { code: "+44", country: "Royaume-Uni" },
+  { code: "+86", country: "Chine" },
+  { code: "+49", country: "Allemagne" },
+  { code: "+34", country: "Espagne" },
+  { code: "+39", country: "Italie" },
+  { code: "+32", country: "Belgique" },
+  { code: "+41", country: "Suisse" },
 ];
 
 function DatePickerField({ value, onChange, label, id }) {
@@ -47,6 +79,32 @@ function DatePickerField({ value, onChange, label, id }) {
           />
         </PopoverContent>
       </Popover>
+    </div>
+  );
+}
+
+function PhoneField({ codeValue, numberValue, onCodeChange, onNumberChange, codeTestId, numberTestId }) {
+  return (
+    <div className="flex gap-2">
+      <div className="w-40 shrink-0">
+        <Select value={codeValue || ""} onValueChange={onCodeChange}>
+          <SelectTrigger data-testid={codeTestId} className="border-slate-300 focus:border-[#1C3530]">
+            <SelectValue placeholder="Indicatif" />
+          </SelectTrigger>
+          <SelectContent className="max-h-60">
+            {COUNTRY_CODES.map(c => (
+              <SelectItem key={c.code} value={c.code}>{c.code} {c.country}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <Input
+        data-testid={numberTestId}
+        placeholder="Numéro de téléphone"
+        value={numberValue || ""}
+        onChange={e => onNumberChange(e.target.value)}
+        className="flex-1 border-slate-300 focus:border-[#1C3530] focus:ring-1 focus:ring-[#1C3530]"
+      />
     </div>
   );
 }
@@ -175,15 +233,16 @@ function ContactsStep({ data, onChange }) {
         <Label className="text-sm font-medium" style={{ color: '#1A2024' }}>Adresse permanente (pays d'origine)</Label>
         <Input data-testid="contacts-permanent-address" placeholder="Adresse dans votre pays d'origine" value={d.permanent_address || ""} onChange={e => u("permanent_address", e.target.value)} className="border-slate-300 focus:border-[#1C3530] focus:ring-1 focus:ring-[#1C3530]" />
       </div>
-      <div className="grid sm:grid-cols-2 gap-5">
-        <div className="space-y-2">
-          <Label className="text-sm font-medium" style={{ color: '#1A2024' }}>Téléphone</Label>
-          <Input data-testid="contacts-phone" placeholder="+33 6 12 34 56 78" value={d.phone || ""} onChange={e => u("phone", e.target.value)} className="border-slate-300 focus:border-[#1C3530] focus:ring-1 focus:ring-[#1C3530]" />
-        </div>
-        <div className="space-y-2">
-          <Label className="text-sm font-medium" style={{ color: '#1A2024' }}>WhatsApp</Label>
-          <Input data-testid="contacts-whatsapp" placeholder="Numéro WhatsApp" value={d.whatsapp || ""} onChange={e => u("whatsapp", e.target.value)} className="border-slate-300 focus:border-[#1C3530] focus:ring-1 focus:ring-[#1C3530]" />
-        </div>
+      <div className="space-y-2">
+        <Label className="text-sm font-medium" style={{ color: '#1A2024' }}>Téléphone</Label>
+        <PhoneField
+          codeValue={d.phone_code}
+          numberValue={d.phone_number}
+          onCodeChange={v => u("phone_code", v)}
+          onNumberChange={v => u("phone_number", v)}
+          codeTestId="contacts-phone-code"
+          numberTestId="contacts-phone-number"
+        />
       </div>
     </div>
   );
@@ -196,32 +255,48 @@ function EmergencyContactStep({ data, onChange }) {
     <div className="space-y-5">
       <div className="grid sm:grid-cols-2 gap-5">
         <div className="space-y-2">
-          <Label className="text-sm font-medium" style={{ color: '#1A2024' }}>Nom du contact d'urgence</Label>
-          <Input data-testid="emergency-name" placeholder="Nom complet" value={d.name || ""} onChange={e => u("name", e.target.value)} className="border-slate-300 focus:border-[#1C3530] focus:ring-1 focus:ring-[#1C3530]" />
+          <Label className="text-sm font-medium" style={{ color: '#1A2024' }}>Nom</Label>
+          <Input data-testid="emergency-last-name" placeholder="Nom de famille" value={d.last_name || ""} onChange={e => u("last_name", e.target.value)} className="border-slate-300 focus:border-[#1C3530] focus:ring-1 focus:ring-[#1C3530]" />
         </div>
         <div className="space-y-2">
-          <Label className="text-sm font-medium" style={{ color: '#1A2024' }}>Relation</Label>
-          <Select value={d.relationship || ""} onValueChange={v => u("relationship", v)}>
-            <SelectTrigger data-testid="emergency-relationship" className="border-slate-300"><SelectValue placeholder="Sélectionner" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="Père">Père</SelectItem>
-              <SelectItem value="Mère">Mère</SelectItem>
-              <SelectItem value="Frère/Sœur">Frère/Sœur</SelectItem>
-              <SelectItem value="Époux/Épouse">Époux/Épouse</SelectItem>
-              <SelectItem value="Autre">Autre</SelectItem>
-            </SelectContent>
-          </Select>
+          <Label className="text-sm font-medium" style={{ color: '#1A2024' }}>Prénom</Label>
+          <Input data-testid="emergency-first-name" placeholder="Prénom" value={d.first_name || ""} onChange={e => u("first_name", e.target.value)} className="border-slate-300 focus:border-[#1C3530] focus:ring-1 focus:ring-[#1C3530]" />
         </div>
       </div>
-      <div className="grid sm:grid-cols-2 gap-5">
+      <div className="space-y-2">
+        <Label className="text-sm font-medium" style={{ color: '#1A2024' }}>Relation</Label>
+        <Select value={d.relationship || ""} onValueChange={v => { u("relationship", v); if (v !== "Autre") onChange({ ...d, relationship: v, relationship_other: "" }); else u("relationship", v); }}>
+          <SelectTrigger data-testid="emergency-relationship" className="border-slate-300"><SelectValue placeholder="Sélectionner" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="Père">Père</SelectItem>
+            <SelectItem value="Mère">Mère</SelectItem>
+            <SelectItem value="Frère/Sœur">Frère/Sœur</SelectItem>
+            <SelectItem value="Époux/Épouse">Époux/Épouse</SelectItem>
+            <SelectItem value="Oncle/Tante">Oncle/Tante</SelectItem>
+            <SelectItem value="Autre">Autre</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      {d.relationship === "Autre" && (
         <div className="space-y-2">
-          <Label className="text-sm font-medium" style={{ color: '#1A2024' }}>Téléphone</Label>
-          <Input data-testid="emergency-phone" placeholder="Numéro de téléphone" value={d.phone || ""} onChange={e => u("phone", e.target.value)} className="border-slate-300 focus:border-[#1C3530] focus:ring-1 focus:ring-[#1C3530]" />
+          <Label className="text-sm font-medium" style={{ color: '#1A2024' }}>Précisez la relation</Label>
+          <Input data-testid="emergency-relationship-other" placeholder="Ex: Tuteur, Ami proche..." value={d.relationship_other || ""} onChange={e => u("relationship_other", e.target.value)} className="border-slate-300 focus:border-[#1C3530] focus:ring-1 focus:ring-[#1C3530]" />
         </div>
-        <div className="space-y-2">
-          <Label className="text-sm font-medium" style={{ color: '#1A2024' }}>Email</Label>
-          <Input data-testid="emergency-email" type="email" placeholder="Email" value={d.email || ""} onChange={e => u("email", e.target.value)} className="border-slate-300 focus:border-[#1C3530] focus:ring-1 focus:ring-[#1C3530]" />
-        </div>
+      )}
+      <div className="space-y-2">
+        <Label className="text-sm font-medium" style={{ color: '#1A2024' }}>Téléphone</Label>
+        <PhoneField
+          codeValue={d.phone_code}
+          numberValue={d.phone_number}
+          onCodeChange={v => u("phone_code", v)}
+          onNumberChange={v => u("phone_number", v)}
+          codeTestId="emergency-phone-code"
+          numberTestId="emergency-phone-number"
+        />
+      </div>
+      <div className="space-y-2">
+        <Label className="text-sm font-medium" style={{ color: '#1A2024' }}>Email</Label>
+        <Input data-testid="emergency-email" type="email" placeholder="Email" value={d.email || ""} onChange={e => u("email", e.target.value)} className="border-slate-300 focus:border-[#1C3530] focus:ring-1 focus:ring-[#1C3530]" />
       </div>
     </div>
   );
@@ -232,9 +307,15 @@ function FinancialGuarantorStep({ data, onChange }) {
   const u = (key, val) => onChange({ ...d, [key]: val });
   return (
     <div className="space-y-5">
-      <div className="space-y-2">
-        <Label className="text-sm font-medium" style={{ color: '#1A2024' }}>Nom du garant financier</Label>
-        <Input data-testid="guarantor-name" placeholder="Nom complet du garant" value={d.name || ""} onChange={e => u("name", e.target.value)} className="border-slate-300 focus:border-[#1C3530] focus:ring-1 focus:ring-[#1C3530]" />
+      <div className="grid sm:grid-cols-2 gap-5">
+        <div className="space-y-2">
+          <Label className="text-sm font-medium" style={{ color: '#1A2024' }}>Nom du garant</Label>
+          <Input data-testid="guarantor-last-name" placeholder="Nom de famille" value={d.last_name || ""} onChange={e => u("last_name", e.target.value)} className="border-slate-300 focus:border-[#1C3530] focus:ring-1 focus:ring-[#1C3530]" />
+        </div>
+        <div className="space-y-2">
+          <Label className="text-sm font-medium" style={{ color: '#1A2024' }}>Prénom du garant</Label>
+          <Input data-testid="guarantor-first-name" placeholder="Prénom" value={d.first_name || ""} onChange={e => u("first_name", e.target.value)} className="border-slate-300 focus:border-[#1C3530] focus:ring-1 focus:ring-[#1C3530]" />
+        </div>
       </div>
       <div className="grid sm:grid-cols-2 gap-5">
         <div className="space-y-2">
@@ -242,9 +323,20 @@ function FinancialGuarantorStep({ data, onChange }) {
           <Input data-testid="guarantor-relationship" placeholder="Ex: Père, Oncle, etc." value={d.relationship || ""} onChange={e => u("relationship", e.target.value)} className="border-slate-300 focus:border-[#1C3530] focus:ring-1 focus:ring-[#1C3530]" />
         </div>
         <div className="space-y-2">
-          <Label className="text-sm font-medium" style={{ color: '#1A2024' }}>Téléphone du garant</Label>
-          <Input data-testid="guarantor-phone" placeholder="Numéro de téléphone" value={d.phone || ""} onChange={e => u("phone", e.target.value)} className="border-slate-300 focus:border-[#1C3530] focus:ring-1 focus:ring-[#1C3530]" />
+          <Label className="text-sm font-medium" style={{ color: '#1A2024' }}>Profession</Label>
+          <Input data-testid="guarantor-profession" placeholder="Profession du garant" value={d.profession || ""} onChange={e => u("profession", e.target.value)} className="border-slate-300 focus:border-[#1C3530] focus:ring-1 focus:ring-[#1C3530]" />
         </div>
+      </div>
+      <div className="space-y-2">
+        <Label className="text-sm font-medium" style={{ color: '#1A2024' }}>Téléphone</Label>
+        <PhoneField
+          codeValue={d.phone_code}
+          numberValue={d.phone_number}
+          onCodeChange={v => u("phone_code", v)}
+          onNumberChange={v => u("phone_number", v)}
+          codeTestId="guarantor-phone-code"
+          numberTestId="guarantor-phone-number"
+        />
       </div>
     </div>
   );
@@ -257,11 +349,17 @@ function FamilyStep({ data, onChange }) {
     <div className="space-y-6">
       <div>
         <h4 className="font-semibold mb-3" style={{ color: '#1A2024', fontFamily: 'Chivo, sans-serif' }}>Père</h4>
-        <div className="grid sm:grid-cols-3 gap-4">
+        <div className="grid sm:grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label className="text-sm font-medium" style={{ color: '#1A2024' }}>Nom du père</Label>
-            <Input data-testid="family-father-name" placeholder="Nom complet" value={d.father_name || ""} onChange={e => u("father_name", e.target.value)} className="border-slate-300 focus:border-[#1C3530] focus:ring-1 focus:ring-[#1C3530]" />
+            <Input data-testid="family-father-last-name" placeholder="Nom de famille" value={d.father_last_name || ""} onChange={e => u("father_last_name", e.target.value)} className="border-slate-300 focus:border-[#1C3530] focus:ring-1 focus:ring-[#1C3530]" />
           </div>
+          <div className="space-y-2">
+            <Label className="text-sm font-medium" style={{ color: '#1A2024' }}>Prénom du père</Label>
+            <Input data-testid="family-father-first-name" placeholder="Prénom" value={d.father_first_name || ""} onChange={e => u("father_first_name", e.target.value)} className="border-slate-300 focus:border-[#1C3530] focus:ring-1 focus:ring-[#1C3530]" />
+          </div>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-4 mt-4">
           <div className="space-y-2">
             <Label className="text-sm font-medium" style={{ color: '#1A2024' }}>Âge</Label>
             <Input data-testid="family-father-age" type="number" placeholder="Âge" value={d.father_age || ""} onChange={e => u("father_age", e.target.value)} className="border-slate-300 focus:border-[#1C3530] focus:ring-1 focus:ring-[#1C3530]" />
@@ -274,11 +372,17 @@ function FamilyStep({ data, onChange }) {
       </div>
       <div className="border-t pt-6" style={{ borderColor: '#E2E4E7' }}>
         <h4 className="font-semibold mb-3" style={{ color: '#1A2024', fontFamily: 'Chivo, sans-serif' }}>Mère</h4>
-        <div className="grid sm:grid-cols-3 gap-4">
+        <div className="grid sm:grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label className="text-sm font-medium" style={{ color: '#1A2024' }}>Nom de la mère</Label>
-            <Input data-testid="family-mother-name" placeholder="Nom complet" value={d.mother_name || ""} onChange={e => u("mother_name", e.target.value)} className="border-slate-300 focus:border-[#1C3530] focus:ring-1 focus:ring-[#1C3530]" />
+            <Input data-testid="family-mother-last-name" placeholder="Nom de famille" value={d.mother_last_name || ""} onChange={e => u("mother_last_name", e.target.value)} className="border-slate-300 focus:border-[#1C3530] focus:ring-1 focus:ring-[#1C3530]" />
           </div>
+          <div className="space-y-2">
+            <Label className="text-sm font-medium" style={{ color: '#1A2024' }}>Prénom de la mère</Label>
+            <Input data-testid="family-mother-first-name" placeholder="Prénom" value={d.mother_first_name || ""} onChange={e => u("mother_first_name", e.target.value)} className="border-slate-300 focus:border-[#1C3530] focus:ring-1 focus:ring-[#1C3530]" />
+          </div>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-4 mt-4">
           <div className="space-y-2">
             <Label className="text-sm font-medium" style={{ color: '#1A2024' }}>Âge</Label>
             <Input data-testid="family-mother-age" type="number" placeholder="Âge" value={d.mother_age || ""} onChange={e => u("mother_age", e.target.value)} className="border-slate-300 focus:border-[#1C3530] focus:ring-1 focus:ring-[#1C3530]" />
@@ -293,59 +397,26 @@ function FamilyStep({ data, onChange }) {
   );
 }
 
-function UniversityStep({ data, onChange, universities }) {
-  const d = data || {};
-  return (
-    <div className="space-y-5">
-      <div className="space-y-2">
-        <Label className="text-sm font-medium" style={{ color: '#1A2024' }}>Choisissez votre université</Label>
-        <Select value={d.id || ""} onValueChange={v => {
-          const uni = universities.find(u => u.id === v);
-          onChange(uni || {});
-        }}>
-          <SelectTrigger data-testid="university-select" className="border-slate-300 focus:border-[#1C3530]">
-            <SelectValue placeholder="Sélectionner une université" />
-          </SelectTrigger>
-          <SelectContent>
-            {universities.map(u => (
-              <SelectItem key={u.id} value={u.id}>{u.name} — {u.city}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      {d.id && (
-        <div className="rounded-xl border p-5 mt-4" style={{ borderColor: '#E2E4E7', background: '#F8FAFC' }}>
-          <h4 className="font-bold" style={{ color: '#1C3530', fontFamily: 'Chivo, sans-serif' }}>{d.name}</h4>
-          <p className="text-sm mt-1" style={{ color: '#525A61' }}>Ville : {d.city}</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function ApplicationWizard() {
   const { api } = useAuth();
   const [currentStep, setCurrentStep] = useState(0);
   const [application, setApplication] = useState(null);
   const [formData, setFormData] = useState({});
-  const [universities, setUniversities] = useState([]);
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
     try {
-      const [appRes, uniRes] = await Promise.all([api.get("/application"), api.get("/universities")]);
-      setApplication(appRes.data);
-      setUniversities(uniRes.data);
+      const res = await api.get("/application");
+      setApplication(res.data);
       setFormData({
-        identity: appRes.data.identity || {},
-        education: appRes.data.education || {},
-        contacts: appRes.data.contacts || {},
-        emergency_contact: appRes.data.emergency_contact || {},
-        financial_guarantor: appRes.data.financial_guarantor || {},
-        family: appRes.data.family || {},
-        university: appRes.data.university || {},
+        identity: res.data.identity || {},
+        education: res.data.education || {},
+        contacts: res.data.contacts || {},
+        emergency_contact: res.data.emergency_contact || {},
+        financial_guarantor: res.data.financial_guarantor || {},
+        family: res.data.family || {},
       });
     } catch (err) {
       toast.error("Erreur lors du chargement");
@@ -378,7 +449,6 @@ export default function ApplicationWizard() {
   const handlePrev = () => { if (currentStep > 0) setCurrentStep(c => c - 1); };
 
   const handleSubmit = async () => {
-    // Save current step first
     const step = STEPS[currentStep];
     await saveStep(step.id, formData[step.id]);
     setSubmitting(true);
@@ -412,7 +482,6 @@ export default function ApplicationWizard() {
       case "emergency_contact": return <EmergencyContactStep data={formData.emergency_contact} onChange={d => updateStepData("emergency_contact", d)} />;
       case "financial_guarantor": return <FinancialGuarantorStep data={formData.financial_guarantor} onChange={d => updateStepData("financial_guarantor", d)} />;
       case "family": return <FamilyStep data={formData.family} onChange={d => updateStepData("family", d)} />;
-      case "university": return <UniversityStep data={formData.university} onChange={d => updateStepData("university", d)} universities={universities} />;
       default: return null;
     }
   };
@@ -420,7 +489,7 @@ export default function ApplicationWizard() {
   return (
     <StudentLayout>
       <div data-testid="application-wizard" className="flex gap-8">
-        {/* Sidebar - Step Navigation */}
+        {/* Sidebar */}
         <div className="hidden lg:block w-64 shrink-0">
           <div className="sticky top-28 space-y-2">
             <h3 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: '#525A61' }}>Étapes</h3>

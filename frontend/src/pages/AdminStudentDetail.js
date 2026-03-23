@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { ArrowLeft, CheckCircle2, XCircle, Clock, Download, FileText, User, GraduationCap, Phone, Shield, Heart, Building2, CreditCard, Send, Copy, MessageSquare } from "lucide-react";
+import { ArrowLeft, CheckCircle2, XCircle, Clock, Download, FileText, User, GraduationCap, Phone, Shield, Heart, Building2, CreditCard, Send, Copy, MapPin } from "lucide-react";
 
 const STATUS_CONFIG = {
   Draft: { label: "Brouillon", color: "#334155", bg: "#F1F5F9" },
@@ -54,11 +55,20 @@ export default function AdminStudentDetail() {
   const [loading, setLoading] = useState(true);
   const [feedbacks, setFeedbacks] = useState({});
   const [actionLoading, setActionLoading] = useState(false);
+  const [universities, setUniversities] = useState([]);
+  const [selectedUni, setSelectedUni] = useState("");
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await api.get(`/admin/students/${studentId}`);
+      const [res, uniRes] = await Promise.all([
+        api.get(`/admin/students/${studentId}`),
+        api.get("/universities")
+      ]);
       setData(res.data);
+      setUniversities(uniRes.data);
+      if (res.data.application?.university?.id) {
+        setSelectedUni(res.data.application.university.id);
+      }
     } catch (err) {
       toast.error("Erreur lors du chargement");
       navigate("/admin");
@@ -100,6 +110,21 @@ export default function AdminStudentDetail() {
       URL.revokeObjectURL(url);
     } catch (err) {
       toast.error("Erreur de téléchargement");
+    }
+  };
+
+  const handleAssignUniversity = async (uniId) => {
+    const uni = universities.find(u => u.id === uniId);
+    if (!uni) return;
+    try {
+      await api.put(`/admin/students/${studentId}/university`, {
+        university_id: uni.id, university_name: uni.name, university_city: uni.city
+      });
+      toast.success(`Université assignée: ${uni.name}`);
+      setSelectedUni(uniId);
+      fetchData();
+    } catch (err) {
+      toast.error("Erreur lors de l'assignation");
     }
   };
 
@@ -190,8 +215,7 @@ export default function AdminStudentDetail() {
                 </div>
                 <InfoRow label="Adresse actuelle" value={contacts.current_address} />
                 <InfoRow label="Adresse permanente" value={contacts.permanent_address} />
-                <InfoRow label="Téléphone" value={contacts.phone} />
-                <InfoRow label="WhatsApp" value={contacts.whatsapp} />
+                <InfoRow label="Téléphone" value={contacts.phone_code && contacts.phone_number ? `${contacts.phone_code} ${contacts.phone_number}` : contacts.phone} />
               </div>
 
               {/* Emergency */}
@@ -200,9 +224,10 @@ export default function AdminStudentDetail() {
                   <Shield className="h-4 w-4" style={{ color: '#1C3530' }} />
                   <h3 className="text-sm font-bold" style={{ color: '#1A2024', fontFamily: 'Chivo, sans-serif' }}>Contact d'urgence</h3>
                 </div>
-                <InfoRow label="Nom" value={emergency.name} />
-                <InfoRow label="Relation" value={emergency.relationship} />
-                <InfoRow label="Téléphone" value={emergency.phone} />
+                <InfoRow label="Nom" value={emergency.last_name} />
+                <InfoRow label="Prénom" value={emergency.first_name} />
+                <InfoRow label="Relation" value={emergency.relationship === "Autre" ? emergency.relationship_other : emergency.relationship} />
+                <InfoRow label="Téléphone" value={emergency.phone_code && emergency.phone_number ? `${emergency.phone_code} ${emergency.phone_number}` : emergency.phone} />
                 <InfoRow label="Email" value={emergency.email} />
               </div>
 
@@ -212,9 +237,11 @@ export default function AdminStudentDetail() {
                   <CreditCard className="h-4 w-4" style={{ color: '#1C3530' }} />
                   <h3 className="text-sm font-bold" style={{ color: '#1A2024', fontFamily: 'Chivo, sans-serif' }}>Garant Financier</h3>
                 </div>
-                <InfoRow label="Nom" value={guarantor.name} />
+                <InfoRow label="Nom" value={guarantor.last_name} />
+                <InfoRow label="Prénom" value={guarantor.first_name} />
                 <InfoRow label="Relation" value={guarantor.relationship} />
-                <InfoRow label="Téléphone" value={guarantor.phone} />
+                <InfoRow label="Profession" value={guarantor.profession} />
+                <InfoRow label="Téléphone" value={guarantor.phone_code && guarantor.phone_number ? `${guarantor.phone_code} ${guarantor.phone_number}` : guarantor.phone} />
               </div>
 
               {/* Family */}
@@ -223,25 +250,42 @@ export default function AdminStudentDetail() {
                   <Heart className="h-4 w-4" style={{ color: '#1C3530' }} />
                   <h3 className="text-sm font-bold" style={{ color: '#1A2024', fontFamily: 'Chivo, sans-serif' }}>Famille</h3>
                 </div>
-                <InfoRow label="Père - Nom" value={family.father_name} />
+                <InfoRow label="Père - Nom" value={family.father_last_name} />
+                <InfoRow label="Père - Prénom" value={family.father_first_name} />
                 <InfoRow label="Père - Âge" value={family.father_age} />
                 <InfoRow label="Père - Profession" value={family.father_profession} />
-                <InfoRow label="Mère - Nom" value={family.mother_name} />
+                <InfoRow label="Mère - Nom" value={family.mother_last_name} />
+                <InfoRow label="Mère - Prénom" value={family.mother_first_name} />
                 <InfoRow label="Mère - Âge" value={family.mother_age} />
                 <InfoRow label="Mère - Profession" value={family.mother_profession} />
               </div>
 
-              {/* University */}
-              {app?.university?.name && (
-                <div className="bg-white border rounded-sm p-4 lg:col-span-2 xl:col-span-1" style={{ borderColor: '#E2E4E7' }}>
-                  <div className="flex items-center gap-2 mb-3 pb-2 border-b" style={{ borderColor: '#E2E4E7' }}>
-                    <Building2 className="h-4 w-4" style={{ color: '#1C3530' }} />
-                    <h3 className="text-sm font-bold" style={{ color: '#1A2024', fontFamily: 'Chivo, sans-serif' }}>Université Choisie</h3>
-                  </div>
-                  <InfoRow label="Nom" value={app.university.name} />
-                  <InfoRow label="Ville" value={app.university.city} />
+              {/* University Assignment (Admin) */}
+              <div className="bg-white border rounded-sm p-4 lg:col-span-2 xl:col-span-1" style={{ borderColor: '#E2E4E7' }}>
+                <div className="flex items-center gap-2 mb-3 pb-2 border-b" style={{ borderColor: '#E2E4E7' }}>
+                  <Building2 className="h-4 w-4" style={{ color: '#1C3530' }} />
+                  <h3 className="text-sm font-bold" style={{ color: '#1A2024', fontFamily: 'Chivo, sans-serif' }}>Université assignée</h3>
                 </div>
-              )}
+                {app?.university?.name && (
+                  <div className="mb-3">
+                    <InfoRow label="Université actuelle" value={app.university.name} />
+                    <InfoRow label="Ville" value={app.university.city} />
+                  </div>
+                )}
+                <div className="space-y-2 mt-2">
+                  <Label className="text-xs font-medium" style={{ color: '#525A61' }}>Assigner / Changer l'université</Label>
+                  <Select value={selectedUni} onValueChange={handleAssignUniversity}>
+                    <SelectTrigger data-testid="admin-assign-university" className="border-slate-300 rounded-sm text-sm">
+                      <SelectValue placeholder="Sélectionner une université" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {universities.map(u => (
+                        <SelectItem key={u.id} value={u.id}>{u.name} — {u.city}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </div>
           </TabsContent>
 

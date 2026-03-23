@@ -35,6 +35,8 @@ class ChinaStudyAPITester:
                     response = requests.post(url, json=data, headers=test_headers)
             elif method == 'PUT':
                 response = requests.put(url, json=data, headers=test_headers)
+            elif method == 'DELETE':
+                response = requests.delete(url, headers=test_headers)
 
             success = response.status_code == expected_status
             if success:
@@ -73,17 +75,29 @@ class ChinaStudyAPITester:
         elif success:
             print(f"   ⚠️  Expected 10+ universities, got {len(response)}")
 
-        # Test document types
+        # Test document types - should return 14 types now
         success, response = self.run_test(
             "Get Document Types",
             "GET",
             "document-types",
             200
         )
-        if success and len(response) >= 6:
-            print(f"   Found {len(response)} document types")
+        if success and len(response) == 14:
+            print(f"   ✅ Found exactly {len(response)} document types (expected 14)")
+            # Check for specific document types
+            doc_types = [doc['id'] for doc in response]
+            expected_types = ['passport_scan', 'id_photo', 'diploma', 'criminal_record', 'medical_certificate']
+            bulletin_types = [f'bulletin_{level}_{term}' for level in ['2nde', '1ere', 'terminale'] for term in ['1', '2', '3']]
+            expected_types.extend(bulletin_types)
+            
+            missing_types = [t for t in expected_types if t not in doc_types]
+            if missing_types:
+                print(f"   ⚠️  Missing document types: {missing_types}")
+            else:
+                print("   ✅ All expected document types present")
         elif success:
-            print(f"   ⚠️  Expected 6+ document types, got {len(response)}")
+            print(f"   ❌ Expected exactly 14 document types, got {len(response)}")
+            print(f"   Document types found: {[doc['id'] for doc in response]}")
 
     def test_student_auth(self):
         """Test student authentication"""
@@ -197,7 +211,7 @@ class ChinaStudyAPITester:
             self.application_id = response.get('id')
             print(f"   Application ID: {self.application_id}")
 
-        # Update application step
+        # Update application step - Identity
         success, response = self.run_test(
             "Update Application - Identity",
             "PUT",
@@ -218,7 +232,7 @@ class ChinaStudyAPITester:
         )
 
         if success:
-            print("   Application update successful")
+            print("   Identity step update successful")
 
         # Update education step
         success, response = self.run_test(
@@ -238,22 +252,126 @@ class ChinaStudyAPITester:
             headers=headers
         )
 
-        # Update other required steps
-        for step_name, step_data in [
-            ("contacts", {"current_address": "123 Test St", "phone": "+33123456789"}),
-            ("emergency_contact", {"name": "Emergency Contact", "relationship": "Père", "phone": "+33987654321", "email": "emergency@test.com"}),
-            ("financial_guarantor", {"name": "Guarantor", "relationship": "Père", "phone": "+33555666777"}),
-            ("family", {"father_name": "Father", "father_age": "50", "mother_name": "Mother", "mother_age": "48"}),
-            ("university", {"id": "blcu", "name": "Beijing Language and Culture University (BLCU)", "city": "Beijing"})
-        ]:
-            self.run_test(
-                f"Update Application - {step_name.title()}",
-                "PUT",
-                "application",
-                200,
-                data={"step": step_name, "data": step_data},
-                headers=headers
-            )
+        # Update contacts step - NEW FORMAT with phone_code and phone_number
+        success, response = self.run_test(
+            "Update Application - Contacts (New Format)",
+            "PUT",
+            "application",
+            200,
+            data={
+                "step": "contacts",
+                "data": {
+                    "current_address": "123 Test St",
+                    "permanent_address": "456 Home St",
+                    "phone_code": "+33",
+                    "phone_number": "123456789"
+                }
+            },
+            headers=headers
+        )
+
+        # Update emergency contact - NEW FORMAT with nom/prénom split and phone_code
+        success, response = self.run_test(
+            "Update Application - Emergency Contact (New Format)",
+            "PUT",
+            "application",
+            200,
+            data={
+                "step": "emergency_contact",
+                "data": {
+                    "last_name": "Emergency",
+                    "first_name": "Contact",
+                    "relationship": "Père",
+                    "phone_code": "+33",
+                    "phone_number": "987654321",
+                    "email": "emergency@test.com"
+                }
+            },
+            headers=headers
+        )
+
+        # Test emergency contact with "Autre" relationship
+        success, response = self.run_test(
+            "Update Application - Emergency Contact with Autre",
+            "PUT",
+            "application",
+            200,
+            data={
+                "step": "emergency_contact",
+                "data": {
+                    "last_name": "Emergency",
+                    "first_name": "Contact",
+                    "relationship": "Autre",
+                    "relationship_other": "Tuteur légal",
+                    "phone_code": "+33",
+                    "phone_number": "987654321",
+                    "email": "emergency@test.com"
+                }
+            },
+            headers=headers
+        )
+
+        # Update financial guarantor - NEW FORMAT with nom/prénom split, profession, and phone_code
+        success, response = self.run_test(
+            "Update Application - Financial Guarantor (New Format)",
+            "PUT",
+            "application",
+            200,
+            data={
+                "step": "financial_guarantor",
+                "data": {
+                    "last_name": "Guarantor",
+                    "first_name": "Financial",
+                    "relationship": "Père",
+                    "profession": "Ingénieur",
+                    "phone_code": "+33",
+                    "phone_number": "555666777"
+                }
+            },
+            headers=headers
+        )
+
+        # Update family - NEW FORMAT with separate nom/prénom for father and mother
+        success, response = self.run_test(
+            "Update Application - Family (New Format)",
+            "PUT",
+            "application",
+            200,
+            data={
+                "step": "family",
+                "data": {
+                    "father_last_name": "Father",
+                    "father_first_name": "Test",
+                    "father_age": "50",
+                    "father_profession": "Engineer",
+                    "mother_last_name": "Mother",
+                    "mother_first_name": "Test",
+                    "mother_age": "48",
+                    "mother_profession": "Teacher"
+                }
+            },
+            headers=headers
+        )
+
+        # Verify that university step is NOT accepted (should be removed)
+        success, response = self.run_test(
+            "Update Application - University Step (Should Fail)",
+            "PUT",
+            "application",
+            400,  # Should fail because university step is removed
+            data={
+                "step": "university",
+                "data": {
+                    "id": "blcu",
+                    "name": "Beijing Language and Culture University (BLCU)",
+                    "city": "Beijing"
+                }
+            },
+            headers=headers
+        )
+
+        if not success:
+            print("   ✅ University step correctly rejected (step removed from wizard)")
 
         return True
 
@@ -267,12 +385,12 @@ class ChinaStudyAPITester:
 
         headers = {'Authorization': f'Bearer {self.student_token}'}
 
-        # Create a test file
+        # Create test file content
         test_file_content = b"Test document content for passport scan"
         
         # Test document upload
         success, response = self.run_test(
-            "Upload Document",
+            "Upload Document - Passport",
             "POST",
             "documents/upload",
             200,
@@ -281,24 +399,55 @@ class ChinaStudyAPITester:
             headers={'Authorization': f'Bearer {self.student_token}'}
         )
 
+        doc_id = None
         if success:
             doc_id = response.get('id')
             print(f"   Document uploaded with ID: {doc_id}")
 
-            # Test get documents
+        # Test multiple diploma uploads (should not replace previous)
+        diploma_ids = []
+        for i in range(3):
             success, response = self.run_test(
-                "Get Documents",
-                "GET",
-                "documents",
+                f"Upload Multiple Diplomas - Diploma {i+1}",
+                "POST",
+                "documents/upload",
+                200,
+                data={"doc_type": "diploma"},
+                files={"file": (f"test_diploma_{i+1}.pdf", test_file_content, "application/pdf")},
+                headers={'Authorization': f'Bearer {self.student_token}'}
+            )
+            if success:
+                diploma_ids.append(response.get('id'))
+
+        # Test get documents
+        success, response = self.run_test(
+            "Get Documents",
+            "GET",
+            "documents",
+            200,
+            headers=headers
+        )
+
+        if success:
+            print(f"   Found {len(response)} documents")
+            diploma_docs = [doc for doc in response if doc['doc_type'] == 'diploma']
+            print(f"   Found {len(diploma_docs)} diploma documents")
+            if len(diploma_docs) >= 3:
+                print("   ✅ Multiple diploma uploads working correctly")
+
+        # Test document deletion (new endpoint)
+        if doc_id:
+            success, response = self.run_test(
+                "Delete Document",
+                "DELETE",
+                f"documents/{doc_id}",
                 200,
                 headers=headers
             )
+            if success:
+                print("   ✅ Document deletion working")
 
-            if success and len(response) > 0:
-                print(f"   Found {len(response)} documents")
-                return True
-
-        return False
+        return True
 
     def test_admin_operations(self):
         """Test admin operations"""
@@ -334,6 +483,24 @@ class ChinaStudyAPITester:
 
             if success:
                 print("   Student detail retrieved successfully")
+
+        # Test university assignment (new endpoint)
+        if self.student_id:
+            success, response = self.run_test(
+                "Assign University to Student",
+                "PUT",
+                f"admin/students/{self.student_id}/university",
+                200,
+                data={
+                    "university_id": "blcu",
+                    "university_name": "Beijing Language and Culture University (BLCU)",
+                    "university_city": "Beijing"
+                },
+                headers=headers
+            )
+
+            if success:
+                print("   ✅ University assignment working")
 
         return True
 
