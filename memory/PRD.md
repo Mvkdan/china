@@ -25,10 +25,16 @@ Plateforme d'intermédiation pour étudiants internationaux souhaitant s'inscrir
 
 ## What's Been Implemented (2026-03-23)
 - [x] Auth JWT (register/login) avec admin pré-créé
-- [x] Formulaire wizard 7 étapes avec sauvegarde par étape
-- [x] Upload de documents (6 types obligatoires) via object storage
+- [x] Formulaire wizard 6 étapes avec sauvegarde par étape (université retirée)
+- [x] Téléphone avec sélecteur d'indicatif pays dans Contacts, Urgence, Garant
+- [x] Contact d'urgence: Nom + Prénom, relation "Autre" avec champ de précision
+- [x] Garant financier: Nom + Prénom, profession ajoutée
+- [x] Famille: Nom + Prénom séparés pour père et mère
+- [x] Upload de documents multiples pour diplômes
+- [x] 9 slots de bulletins scolaires (2nde, 1ère, Terminale × 3 trimestres)
 - [x] Dashboard étudiant avec barre de progression
 - [x] Dashboard admin CRM avec filtres et recherche
+- [x] Assignation d'université par l'admin (et non l'étudiant)
 - [x] Vue détaillée étudiant admin (copier-coller facilité)
 - [x] Gestion documents admin (valider/rejeter avec commentaire)
 - [x] Avancement de statut manuel par l'admin
