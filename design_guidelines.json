@@ -1,0 +1,85 @@
+{
+  "theme_and_concept": {
+    "concept_name": "Institution Numérique",
+    "description": "A high-trust, authoritative, yet modern interface. Uses the 'Swiss & High-Contrast' paired with an 'Earthy/Organic' palette to build trust for a service handling sensitive personal documents and international payments.",
+    "emotional_tone": "Reassuring, structured, secure, and clear. Zero distractions."
+  },
+  "colors": {
+    "background_student": "#FDFBF7",
+    "background_admin": "#F4F5F6",
+    "surface": "#FFFFFF",
+    "primary": "#1C3530",
+    "primary_hover": "#274842",
+    "accent": "#C95B36",
+    "accent_hover": "#A64A2C",
+    "text_primary": "#1A2024",
+    "text_secondary": "#525A61",
+    "borders": "#E2E4E7",
+    "statuses": {
+      "brouillon": {"bg": "#F1F5F9", "text": "#334155"},
+      "en_attente_revision": {"bg": "#FEF3C7", "text": "#92400E"},
+      "en_attente_paiement": {"bg": "#E0E7FF", "text": "#3730A3"},
+      "paye": {"bg": "#DCFCE7", "text": "#166534"},
+      "soumis": {"bg": "#F3E8FF", "text": "#6B21A8"},
+      "accepte": {"bg": "#D1FAE5", "text": "#065F46"}
+    }
+  },
+  "typography": {
+    "heading_font": "Chivo",
+    "body_font": "IBM Plex Sans",
+    "heading_strategy": "Solid, reassuring, wide display characteristics. Use tight tracking (tracking-tight) for large headers.",
+    "body_strategy": "Tabular layout by default, crisp and highly readable at small sizes. Excellent for data-dense admin tables."
+  },
+  "layout_and_spacing": {
+    "spacing_scale": "Use extended spacing (p-6, p-8, p-12) for the Student wizard to create breathing room. Use tight spacing (p-2, p-4) for Admin.",
+    "student_layout": "Split-screen bento: 4-col sticky left sidebar for the wizard progress steps, 8-col right side for the active form card. Wide gaps (gap-8 or gap-12).",
+    "admin_layout": "Full-width 'Terminal/Grid' look. Strict table grids. No max-width limitations to maximize data density.",
+    "borders": "Student side uses soft 'Tactile' style (1px border-slate-200 + shadow-sm). Admin uses 'Grid Borders' (border-collapse, visible structural borders)."
+  },
+  "components_and_interactions": {
+    "cards": "bg-white border border-slate-200 shadow-[0_4px_24px_rgba(0,0,0,0.04)] rounded-xl (Student). rounded-none or rounded-sm (Admin).",
+    "buttons": "Pill-shaped (rounded-full) for primary actions on Student side to feel friendly. Sharp rectangles (rounded-sm) for Admin side actions.",
+    "inputs": "Shadcn UI defaults but override borders to border-slate-300 focus:border-primary focus:ring-1 focus:ring-primary. No heavy box-shadows.",
+    "transitions": "Use Framer Motion for stepping through the wizard (slide-left/right with opacity crossfade). All hover states must explicitly declare text and bg color transitions.",
+    "icons": "Use lucide-react (strictly no emojis). Run `yarn add lucide-react` if not installed."
+  },
+  "visual_enhancers": {
+    "glassmorphism": "Only use for sticky headers (bg-white/80 backdrop-blur-xl border-b border-slate-200/50). Never for forms.",
+    "textures": "Subtle SVG noise overlay on the Student side background (opacity-20) to kill the 'digital flatness'.",
+    "doc_vault": "Upload zones must have thick dashed borders (border-2 border-dashed border-slate-300), bg-slate-50, hover:bg-slate-100 hover:border-primary transition-colors."
+  },
+  "images": [
+    {
+      "url": "https://images.pexels.com/photos/7102/notes-macbook-study-conference.jpg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "category": "hero_or_auth",
+      "description": "Student studying with a laptop. Perfect for the login/register page background or split-screen."
+    },
+    {
+      "url": "https://images.pexels.com/photos/28396975/pexels-photo-28396975.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "category": "university_destination",
+      "description": "Chinese university campus. Good for the 'University Selection' step in the wizard to add visual appeal."
+    }
+  ],
+  "accessibility_and_testing": {
+    "data_testid_rule": "ALL interactive elements (inputs, selects, buttons, file drops, row actions) MUST have a role-based kebab-case data-testid (e.g., data-testid='submit-identity-button', data-testid='student-row-approve').",
+    "contrast": "Ensure pure white text is used over the primary #1C3530 button backgrounds."
+  },
+  "instructions_to_main_agent": [
+    "Use named exports for all React components (.js files) and default exports for Pages.",
+    "Do NOT use 'Inter', 'Roboto', or 'Open Sans'. Strictly import and use 'Chivo' and 'IBM Plex Sans' from Google Fonts.",
+    "The admin dashboard must be extremely dense. Do not use standard Shadcn Cards for data rows. Build a high-density raw HTML/Tailwind table.",
+    "Implement the multi-step form state management robustly so students don't lose data between steps.",
+    "NEVER use generic placeholder texts; use French labels (e.g., 'Prénom', 'Nom de famille', 'Passeport').",
+    "For toasts, use Sonner. Avoid generic JS alerts.",
+    "No HTML <input type='date'>; use Shadcn Calendar.",
+    "Include 'data-testid' on every major UI element as required by the testing framework."
+  ],
+  "universal_guidelines_for_main_agent": [
+    "Do not converge toward generic 'AI slop' aesthetics. Inject personality using the specified typography and earthy/high-contrast palette.",
+    "Never apply 'transition: all'. Explicitly state transition properties.",
+    "Do not center-align the main app wrapper container; respect natural left-aligned reading flows.",
+    "Do not use AI emoji characters for icons. Use lucide-react.",
+    "Every interaction needs micro-animations (e.g., hover lifts, subtle color shifts).",
+    "Ensure accessible contrast ratios, especially over the earthy background tones."
+  ]
+}
