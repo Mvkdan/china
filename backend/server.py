@@ -4,6 +4,9 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+import io
+import zipfile
+import csv
 from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict
@@ -12,6 +15,7 @@ from datetime import datetime, timezone
 import bcrypt
 import jwt
 import requests
+from fpdf import FPDF
 from emergentintegrations.payments.stripe.checkout import StripeCheckout, CheckoutSessionResponse, CheckoutStatusResponse, CheckoutSessionRequest
 
 ROOT_DIR = Path(__file__).parent
@@ -59,18 +63,18 @@ def get_object(path: str):
     resp.raise_for_status()
     return resp.content, resp.headers.get("Content-Type", "application/octet-stream")
 
-# Universities list
+# Universities list with deadlines
 UNIVERSITIES = [
-    {"id": "blcu", "name": "Beijing Language and Culture University (BLCU)", "city": "Beijing"},
-    {"id": "shanghai", "name": "Shanghai University", "city": "Shanghai"},
-    {"id": "fudan", "name": "Fudan University", "city": "Shanghai"},
-    {"id": "peking", "name": "Peking University", "city": "Beijing"},
-    {"id": "tsinghua", "name": "Tsinghua University", "city": "Beijing"},
-    {"id": "zhejiang", "name": "Zhejiang University", "city": "Hangzhou"},
-    {"id": "wuhan", "name": "Wuhan University", "city": "Wuhan"},
-    {"id": "sun_yatsen", "name": "Sun Yat-sen University", "city": "Guangzhou"},
-    {"id": "nanjing", "name": "Nanjing University", "city": "Nanjing"},
-    {"id": "sichuan", "name": "Sichuan University", "city": "Chengdu"},
+    {"id": "blcu", "name": "Beijing Language and Culture University (BLCU)", "city": "Beijing", "deadline": "2026-06-15"},
+    {"id": "shanghai", "name": "Shanghai University", "city": "Shanghai", "deadline": "2026-05-30"},
+    {"id": "fudan", "name": "Fudan University", "city": "Shanghai", "deadline": "2026-05-15"},
+    {"id": "peking", "name": "Peking University", "city": "Beijing", "deadline": "2026-04-30"},
+    {"id": "tsinghua", "name": "Tsinghua University", "city": "Beijing", "deadline": "2026-05-01"},
+    {"id": "zhejiang", "name": "Zhejiang University", "city": "Hangzhou", "deadline": "2026-06-01"},
+    {"id": "wuhan", "name": "Wuhan University", "city": "Wuhan", "deadline": "2026-06-30"},
+    {"id": "sun_yatsen", "name": "Sun Yat-sen University", "city": "Guangzhou", "deadline": "2026-06-15"},
+    {"id": "nanjing", "name": "Nanjing University", "city": "Nanjing", "deadline": "2026-05-31"},
+    {"id": "sichuan", "name": "Sichuan University", "city": "Chengdu", "deadline": "2026-07-15"},
 ]
 
 DOCUMENT_TYPES = [
@@ -90,7 +94,19 @@ DOCUMENT_TYPES = [
     {"id": "medical_certificate", "label": "Certificat Médical", "multiple": False, "group": "other"},
 ]
 
-APPLICATION_STATUSES = ["Draft", "Pending_Review", "Awaiting_Payment", "Paid", "Submitted_to_Uni", "Accepted"]
+APPLICATION_STATUSES = ["Nouveau", "A_Verifier", "Correction_Requise", "Pret_Soumission", "Paid", "Soumis", "Admis"]
+
+CANNED_RESPONSES = [
+    {"id": "passport_cut", "label": "Passeport coupé", "text": "Le scan du passeport est coupé, merci de reprendre une photo entière montrant toutes les informations."},
+    {"id": "photo_blur", "label": "Photo floue", "text": "La photo est floue ou de mauvaise qualité. Merci de fournir une photo nette sur fond blanc."},
+    {"id": "photo_background", "label": "Fond non blanc", "text": "La photo d'identité doit être prise sur un fond blanc uni. Merci de la refaire."},
+    {"id": "criminal_old", "label": "Casier ancien", "text": "Le casier judiciaire doit dater de moins de 6 mois. Merci de fournir un document récent."},
+    {"id": "medical_stamp", "label": "Certificat sans tampon", "text": "Le certificat médical manque le tampon officiel de l'hôpital. Merci de faire tamponner le document."},
+    {"id": "diploma_unreadable", "label": "Diplôme illisible", "text": "Le scan du diplôme est illisible. Merci de scanner à nouveau en haute résolution."},
+    {"id": "transcript_incomplete", "label": "Bulletin incomplet", "text": "Le bulletin scolaire est incomplet ou partiellement coupé. Merci de fournir le document complet."},
+    {"id": "wrong_format", "label": "Mauvais format", "text": "Le document n'est pas au bon format. Merci de le fournir en PDF ou image (JPG/PNG)."},
+    {"id": "missing_translation", "label": "Traduction manquante", "text": "Ce document nécessite une traduction certifiée en anglais ou en chinois."},
+]
 
 # Create the main app
 app = FastAPI()
@@ -183,7 +199,7 @@ async def register(req: RegisterRequest):
         "financial_guarantor": {},
         "family": {},
         "university": None,
-        "status": "Draft",
+        "status": "Nouveau",
         "completed_steps": [],
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat()
@@ -246,7 +262,7 @@ async def update_application(update: ApplicationUpdate, user=Depends(get_current
     app_data = await db.applications.find_one({"user_id": user["id"]})
     if not app_data:
         raise HTTPException(status_code=404, detail="Aucune candidature trouvée")
-    if app_data["status"] not in ["Draft", "Pending_Review"]:
+    if app_data["status"] not in ["Nouveau", "Correction_Requise"]:
         raise HTTPException(status_code=400, detail="La candidature ne peut plus être modifiée à ce stade")
     
     valid_steps = ["identity", "education", "contacts", "emergency_contact", "financial_guarantor", "family"]
@@ -272,7 +288,7 @@ async def submit_application(user=Depends(get_current_user)):
     app_data = await db.applications.find_one({"user_id": user["id"]}, {"_id": 0})
     if not app_data:
         raise HTTPException(status_code=404, detail="Aucune candidature trouvée")
-    if app_data["status"] != "Draft":
+    if app_data["status"] not in ["Nouveau", "Correction_Requise"]:
         raise HTTPException(status_code=400, detail="La candidature a déjà été soumise")
     
     required_steps = ["identity", "education", "contacts", "emergency_contact", "financial_guarantor", "family"]
@@ -295,9 +311,11 @@ async def submit_application(user=Depends(get_current_user)):
     
     await db.applications.update_one(
         {"user_id": user["id"]},
-        {"$set": {"status": "Pending_Review", "updated_at": datetime.now(timezone.utc).isoformat()}}
+        {"$set": {"status": "A_Verifier", "updated_at": datetime.now(timezone.utc).isoformat()}}
     )
-    return {"message": "Candidature soumise avec succès", "status": "Pending_Review"}
+    # Create notification
+    await create_notification(user["id"], "Candidature soumise", "Votre candidature est en cours de vérification par notre équipe.")
+    return {"message": "Candidature soumise avec succès", "status": "A_Verifier"}
 
 # ── Document Routes ──
 @api_router.post("/documents/upload")
@@ -400,12 +418,22 @@ async def get_student_detail(student_id: str, admin=Depends(require_admin)):
 async def update_document_status(doc_id: str, update: DocumentStatusUpdate, admin=Depends(require_admin)):
     if update.status not in ["Approved", "Rejected", "Pending"]:
         raise HTTPException(status_code=400, detail="Statut invalide")
-    result = await db.documents.update_one(
+    doc = await db.documents.find_one({"id": doc_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document non trouvé")
+    await db.documents.update_one(
         {"id": doc_id},
         {"$set": {"status": update.status, "feedback": update.feedback, "updated_at": datetime.now(timezone.utc).isoformat()}}
     )
-    if result.modified_count == 0:
-        raise HTTPException(status_code=404, detail="Document non trouvé")
+    # Create notification for student
+    doc_label = next((dt["label"] for dt in DOCUMENT_TYPES if dt["id"] == doc.get("doc_type")), doc.get("doc_type", "Document"))
+    if update.status == "Rejected":
+        msg = f"Votre document '{doc_label}' a été rejeté."
+        if update.feedback:
+            msg += f" Motif : {update.feedback}"
+        await create_notification(doc["user_id"], "Document rejeté", msg)
+    elif update.status == "Approved":
+        await create_notification(doc["user_id"], "Document validé", f"Votre document '{doc_label}' a été validé.")
     return {"message": "Statut du document mis à jour"}
 
 @api_router.put("/admin/students/{student_id}/status")
@@ -419,6 +447,17 @@ async def update_student_status(student_id: str, update: StudentStatusUpdate, ad
         {"user_id": student_id},
         {"$set": {"status": update.status, "updated_at": datetime.now(timezone.utc).isoformat()}}
     )
+    # Create notification for student
+    STATUS_LABELS = {
+        "Nouveau": "Nouveau dossier",
+        "A_Verifier": "En cours de vérification",
+        "Correction_Requise": "Correction requise - Veuillez vérifier vos documents et corriger les éléments signalés.",
+        "Pret_Soumission": "Dossier validé ! Le paiement est maintenant disponible.",
+        "Paid": "Paiement reçu. Votre dossier est en cours de traitement.",
+        "Soumis": "Votre dossier a été soumis à l'université.",
+        "Admis": "Félicitations ! Vous avez été admis !"
+    }
+    await create_notification(student_id, "Statut mis à jour", STATUS_LABELS.get(update.status, f"Statut: {update.status}"))
     return {"message": f"Statut mis à jour: {update.status}"}
 
 # ── Reference Data Routes ──
@@ -436,7 +475,7 @@ async def create_payment_session(req: PaymentRequest, http_request: Request, use
     app_data = await db.applications.find_one({"user_id": user["id"]}, {"_id": 0})
     if not app_data:
         raise HTTPException(status_code=404, detail="Aucune candidature trouvée")
-    if app_data["status"] != "Awaiting_Payment":
+    if app_data["status"] != "Pret_Soumission":
         raise HTTPException(status_code=400, detail="Le paiement n'est pas encore requis pour cette candidature")
     
     # Check for existing paid transaction
@@ -540,6 +579,250 @@ async def stripe_webhook(request: Request):
         logger.error(f"Webhook error: {e}")
         return {"status": "error"}
 
+# ── Notification Helper ──
+async def create_notification(user_id: str, title: str, message: str):
+    notif = {
+        "id": str(uuid.uuid4()),
+        "user_id": user_id,
+        "title": title,
+        "message": message,
+        "read": False,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.notifications.insert_one(notif)
+
+# ── Notifications Routes ──
+@api_router.get("/notifications")
+async def get_notifications(user=Depends(get_current_user)):
+    notifs = await db.notifications.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(50)
+    return notifs
+
+@api_router.put("/notifications/{notif_id}/read")
+async def mark_notification_read(notif_id: str, user=Depends(get_current_user)):
+    await db.notifications.update_one({"id": notif_id, "user_id": user["id"]}, {"$set": {"read": True}})
+    return {"message": "ok"}
+
+@api_router.put("/notifications/read-all")
+async def mark_all_read(user=Depends(get_current_user)):
+    await db.notifications.update_many({"user_id": user["id"], "read": False}, {"$set": {"read": True}})
+    return {"message": "ok"}
+
+# ── Private Notes Routes ──
+class NoteCreate(BaseModel):
+    text: str
+
+@api_router.get("/admin/students/{student_id}/notes")
+async def get_notes(student_id: str, admin=Depends(require_admin)):
+    notes = await db.notes.find({"student_id": student_id}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return notes
+
+@api_router.post("/admin/students/{student_id}/notes")
+async def add_note(student_id: str, note: NoteCreate, admin=Depends(require_admin)):
+    n = {
+        "id": str(uuid.uuid4()),
+        "student_id": student_id,
+        "admin_id": admin["id"],
+        "admin_name": f"{admin.get('first_name','')} {admin.get('last_name','')}",
+        "text": note.text,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.notes.insert_one(n)
+    n.pop("_id", None)
+    return n
+
+@api_router.delete("/admin/notes/{note_id}")
+async def delete_note(note_id: str, admin=Depends(require_admin)):
+    await db.notes.delete_one({"id": note_id})
+    return {"message": "Note supprimée"}
+
+# ── Canned Responses ──
+@api_router.get("/canned-responses")
+async def get_canned_responses():
+    return CANNED_RESPONSES
+
+# ── PDF Generation ──
+@api_router.get("/admin/students/{student_id}/pdf")
+async def generate_student_pdf(student_id: str, admin=Depends(require_admin)):
+    student = await db.users.find_one({"id": student_id, "role": "student"}, {"_id": 0, "password_hash": 0})
+    if not student:
+        raise HTTPException(status_code=404, detail="Étudiant non trouvé")
+    app_data = await db.applications.find_one({"user_id": student_id}, {"_id": 0})
+    docs = await db.documents.find({"user_id": student_id}, {"_id": 0}).to_list(100)
+
+    identity = app_data.get("identity", {}) if app_data else {}
+    education = app_data.get("education", {}) if app_data else {}
+    contacts = app_data.get("contacts", {}) if app_data else {}
+    emergency = app_data.get("emergency_contact", {}) if app_data else {}
+    guarantor = app_data.get("financial_guarantor", {}) if app_data else {}
+    family = app_data.get("family", {}) if app_data else {}
+    university = app_data.get("university", {}) if app_data else {}
+
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+
+    # Try to get ID photo for the PDF
+    id_photo_doc = next((d for d in docs if d["doc_type"] == "id_photo"), None)
+    photo_path = None
+    if id_photo_doc:
+        try:
+            photo_data, ct = get_object(id_photo_doc["storage_path"])
+            ext = id_photo_doc["original_filename"].split(".")[-1].lower()
+            if ext in ["jpg", "jpeg", "png"]:
+                photo_path = f"/tmp/photo_{student_id}.{ext}"
+                with open(photo_path, "wb") as f:
+                    f.write(photo_data)
+        except Exception:
+            pass
+
+    # Header
+    pdf.set_font("Helvetica", "B", 18)
+    pdf.cell(0, 12, "ChinaStudy - Fiche Recapitulative", ln=True, align="C")
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(0, 6, f"Generee le {datetime.now(timezone.utc).strftime('%d/%m/%Y %H:%M')}", ln=True, align="C")
+    pdf.ln(8)
+
+    # Photo + Identity side by side
+    if photo_path:
+        try:
+            pdf.image(photo_path, x=pdf.get_x(), y=pdf.get_y(), w=30)
+            pdf.set_x(45)
+        except Exception:
+            pass
+
+    def section(title):
+        pdf.set_font("Helvetica", "B", 12)
+        pdf.set_fill_color(28, 53, 48)
+        pdf.set_text_color(255, 255, 255)
+        pdf.cell(0, 8, f"  {title}", ln=True, fill=True)
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_font("Helvetica", "", 10)
+
+    def row(label, value):
+        pdf.set_font("Helvetica", "B", 9)
+        pdf.cell(60, 6, label, border=0)
+        pdf.set_font("Helvetica", "", 9)
+        pdf.cell(0, 6, str(value or "-"), ln=True)
+
+    section("Identite")
+    row("Nom:", identity.get("last_name"))
+    row("Prenom:", identity.get("first_name"))
+    row("N. Passeport:", identity.get("passport_number"))
+    row("Expiration:", identity.get("passport_expiry"))
+    row("Nationalite:", identity.get("nationality"))
+    row("Date de naissance:", identity.get("date_of_birth"))
+    row("Sexe:", identity.get("gender"))
+    row("Etat matrimonial:", identity.get("marital_status"))
+    pdf.ln(3)
+
+    section("Education")
+    row("Diplome:", education.get("highest_degree"))
+    row("Etablissement:", education.get("institution_name"))
+    row("Chinois:", education.get("chinese_level"))
+    row("Anglais:", education.get("english_level"))
+    pdf.ln(3)
+
+    section("Contacts")
+    phone = f"{contacts.get('phone_code','')} {contacts.get('phone_number','')}" if contacts.get('phone_number') else ""
+    row("Telephone:", phone)
+    row("Adresse actuelle:", contacts.get("current_address"))
+    row("Adresse permanente:", contacts.get("permanent_address"))
+    pdf.ln(3)
+
+    section("Contact d'urgence")
+    row("Nom:", f"{emergency.get('last_name','')} {emergency.get('first_name','')}")
+    rel = emergency.get("relationship_other") if emergency.get("relationship") == "Autre" else emergency.get("relationship")
+    row("Relation:", rel)
+    e_phone = f"{emergency.get('phone_code','')} {emergency.get('phone_number','')}" if emergency.get('phone_number') else ""
+    row("Telephone:", e_phone)
+    row("Email:", emergency.get("email"))
+    pdf.ln(3)
+
+    section("Garant Financier")
+    row("Nom:", f"{guarantor.get('last_name','')} {guarantor.get('first_name','')}")
+    row("Profession:", guarantor.get("profession"))
+    row("Relation:", guarantor.get("relationship"))
+    g_phone = f"{guarantor.get('phone_code','')} {guarantor.get('phone_number','')}" if guarantor.get('phone_number') else ""
+    row("Telephone:", g_phone)
+    pdf.ln(3)
+
+    section("Famille")
+    row("Pere:", f"{family.get('father_last_name','')} {family.get('father_first_name','')}")
+    row("Age/Profession:", f"{family.get('father_age','-')} ans / {family.get('father_profession','-')}")
+    row("Mere:", f"{family.get('mother_last_name','')} {family.get('mother_first_name','')}")
+    row("Age/Profession:", f"{family.get('mother_age','-')} ans / {family.get('mother_profession','-')}")
+    pdf.ln(3)
+
+    if university:
+        section("Universite")
+        row("Nom:", university.get("name"))
+        row("Ville:", university.get("city"))
+        pdf.ln(3)
+
+    section("Documents")
+    for doc in docs:
+        status_sym = "V" if doc["status"] == "Approved" else ("X" if doc["status"] == "Rejected" else "?")
+        pdf.cell(0, 5, f"  [{status_sym}] {doc['doc_type']} - {doc['original_filename']} ({doc['status']})", ln=True)
+
+    # Clean up temp photo
+    if photo_path:
+        try:
+            os.remove(photo_path)
+        except Exception:
+            pass
+
+    pdf_bytes = pdf.output()
+    fname = f"{identity.get('last_name','ETUDIANT')}_{identity.get('first_name','')}_{identity.get('passport_number','')}.pdf".replace(" ", "_")
+    return Response(content=bytes(pdf_bytes), media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+# ── ZIP Download ──
+@api_router.get("/admin/students/{student_id}/zip")
+async def download_student_zip(student_id: str, admin=Depends(require_admin)):
+    student = await db.users.find_one({"id": student_id, "role": "student"}, {"_id": 0, "password_hash": 0})
+    if not student:
+        raise HTTPException(status_code=404, detail="Étudiant non trouvé")
+    app_data = await db.applications.find_one({"user_id": student_id}, {"_id": 0})
+    docs = await db.documents.find({"user_id": student_id}, {"_id": 0}).to_list(100)
+    
+    identity = app_data.get("identity", {}) if app_data else {}
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        for doc in docs:
+            try:
+                data, ct = get_object(doc["storage_path"])
+                filename = f"{doc['doc_type']}/{doc['original_filename']}"
+                zf.writestr(filename, data)
+            except Exception as e:
+                logger.error(f"Error downloading doc {doc['id']}: {e}")
+    
+    zip_buffer.seek(0)
+    fname = f"{identity.get('last_name','ETUDIANT')}_{identity.get('first_name','')}_{identity.get('passport_number','')}.zip".replace(" ", "_")
+    return Response(content=zip_buffer.getvalue(), media_type="application/zip", headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+# ── CSV Export ──
+@api_router.get("/admin/export/csv")
+async def export_csv(admin=Depends(require_admin)):
+    students = await db.users.find({"role": "student"}, {"_id": 0, "password_hash": 0}).to_list(1000)
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Nom", "Prenom", "Email", "Passeport", "Nationalite", "Date_Naissance", "Sexe", "Diplome", "Etablissement", "Chinois", "Anglais", "Universite", "Statut", "Date_Inscription"])
+    for s in students:
+        app = await db.applications.find_one({"user_id": s["id"]}, {"_id": 0})
+        if not app:
+            continue
+        identity = app.get("identity", {})
+        education = app.get("education", {})
+        uni = app.get("university", {})
+        writer.writerow([
+            identity.get("last_name", ""), identity.get("first_name", ""), s.get("email", ""),
+            identity.get("passport_number", ""), identity.get("nationality", ""), identity.get("date_of_birth", ""),
+            identity.get("gender", ""), education.get("highest_degree", ""), education.get("institution_name", ""),
+            education.get("chinese_level", ""), education.get("english_level", ""),
+            uni.get("name", "") if uni else "", app.get("status", ""), app.get("created_at", "")
+        ])
+    csv_bytes = output.getvalue().encode("utf-8-sig")
+    return Response(content=csv_bytes, media_type="text/csv", headers={"Content-Disposition": 'attachment; filename="etudiants_chinastudy.csv"'})
+
 # ── Seed Admin ──
 @app.on_event("startup")
 async def startup():
@@ -571,6 +854,8 @@ async def startup():
     await db.documents.create_index("application_id")
     await db.documents.create_index("user_id")
     await db.payment_transactions.create_index("session_id")
+    await db.notifications.create_index("user_id")
+    await db.notes.create_index("student_id")
 
 app.include_router(api_router)
 
