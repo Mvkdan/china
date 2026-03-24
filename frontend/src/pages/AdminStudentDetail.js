@@ -38,6 +38,7 @@ export default function AdminStudentDetail() {
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studentId]);
 
   const loadData = async () => {

@@ -38,6 +38,7 @@ export default function DocumentVault() {
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile]);
 
   const loadData = async () => {

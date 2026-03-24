@@ -32,6 +32,7 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     filterStudents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [students, searchTerm, statusFilter]);
 
   const loadStudents = async () => {
