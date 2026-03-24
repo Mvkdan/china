@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/lib/auth";
+import { applicationHelpers } from "@/lib/helpers";
 import { StudentLayout } from "@/components/StudentLayout";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -398,7 +399,7 @@ function FamilyStep({ data, onChange }) {
 }
 
 export default function ApplicationWizard() {
-  const { api } = useAuth();
+  const { profile } = useAuth();
   const [currentStep, setCurrentStep] = useState(0);
   const [application, setApplication] = useState(null);
   const [formData, setFormData] = useState({});
@@ -407,34 +408,37 @@ export default function ApplicationWizard() {
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
+    if (!profile) return;
     try {
-      const res = await api.get("/application");
-      setApplication(res.data);
+      const data = await applicationHelpers.getApplication(profile.id);
+      setApplication(data);
       setFormData({
-        identity: res.data.identity || {},
-        education: res.data.education || {},
-        contacts: res.data.contacts || {},
-        emergency_contact: res.data.emergency_contact || {},
-        financial_guarantor: res.data.financial_guarantor || {},
-        family: res.data.family || {},
+        identity: data?.identity || {},
+        education: data?.education || {},
+        contacts: data?.contacts || {},
+        emergency_contact: data?.emergency_contact || {},
+        financial_guarantor: data?.financial_guarantor || {},
+        family: data?.family || {},
       });
     } catch (err) {
+      console.error('Error loading application:', err);
       toast.error("Erreur lors du chargement");
     } finally {
       setLoading(false);
     }
-  }, [api]);
+  }, [profile]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const saveStep = async (stepId, data) => {
     setSaving(true);
     try {
-      const res = await api.put("/application", { step: stepId, data });
-      setApplication(res.data);
+      const updated = await applicationHelpers.updateStep(profile.id, stepId, data);
+      setApplication(updated);
       toast.success("Étape sauvegardée");
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Erreur de sauvegarde");
+      console.error('Error saving step:', err);
+      toast.error("Erreur de sauvegarde");
     } finally {
       setSaving(false);
     }
@@ -453,11 +457,12 @@ export default function ApplicationWizard() {
     await saveStep(step.id, formData[step.id]);
     setSubmitting(true);
     try {
-      await api.post("/application/submit");
+      await applicationHelpers.submitApplication(profile.id);
       toast.success("Candidature soumise avec succès !");
       fetchData();
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Erreur lors de la soumission");
+      console.error('Error submitting application:', err);
+      toast.error("Erreur lors de la soumission");
     } finally {
       setSubmitting(false);
     }
@@ -469,7 +474,7 @@ export default function ApplicationWizard() {
 
   if (loading) return <StudentLayout><div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1C3530]"></div></div></StudentLayout>;
 
-  const canEdit = application?.status === "Draft" || application?.status === "Pending_Review";
+  const canEdit = !application?.status || application?.status === "Nouveau" || application?.status === "Correction_Requise";
   const step = STEPS[currentStep];
   const completedSteps = application?.completed_steps || [];
   const allStepsComplete = STEPS.every(s => completedSteps.includes(s.id));
@@ -567,7 +572,7 @@ export default function ApplicationWizard() {
                   <Button onClick={handleNext} disabled={saving || !canEdit} data-testid="wizard-next-btn" className="rounded-full text-white" style={{ backgroundColor: '#1C3530' }}>
                     Suivant <ChevronRight className="ml-1 h-4 w-4" />
                   </Button>
-                ) : canEdit && application?.status === "Draft" ? (
+                ) : canEdit && (!application?.status || application?.status === "Nouveau") ? (
                   <Button onClick={handleSubmit} disabled={submitting || !allStepsComplete} data-testid="wizard-submit-btn" className="rounded-full text-white" style={{ backgroundColor: '#C95B36' }}>
                     <Send className="mr-1 h-4 w-4" /> {submitting ? "Soumission..." : "Soumettre la candidature"}
                   </Button>

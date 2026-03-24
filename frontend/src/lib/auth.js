@@ -1,65 +1,115 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { supabase } from './supabase';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+const AuthContext = createContext({});
 
-const AuthContext = createContext(null);
+export const useAuth = () => useContext(AuthContext);
 
-export function AuthProvider({ children }) {
+export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('token'));
+  const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const api = useCallback(() => {
-    const instance = axios.create({ baseURL: API });
-    if (token) {
-      instance.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    }
-    return instance;
-  }, [token]);
-
   useEffect(() => {
-    if (token) {
-      api().get('/auth/me')
-        .then(res => { setUser(res.data); setLoading(false); })
-        .catch(() => { localStorage.removeItem('token'); setToken(null); setUser(null); setLoading(false); });
-    } else {
+    // Vérifier la session au chargement
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setUser(session.user);
+        loadProfile(session.user.id);
+      } else {
+        setLoading(false);
+      }
+    });
+
+    // Écouter les changements d'authentification
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        setUser(session.user);
+        await loadProfile(session.user.id);
+      } else {
+        setUser(null);
+        setProfile(null);
+      }
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const loadProfile = async (userId) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) throw error;
+      setProfile(data);
+    } catch (error) {
+      console.error('Error loading profile:', error);
+    } finally {
       setLoading(false);
     }
-  }, [token, api]);
-
-  const login = async (email, password) => {
-    const res = await api().post('/auth/login', { email, password });
-    localStorage.setItem('token', res.data.token);
-    setToken(res.data.token);
-    setUser(res.data.user);
-    return res.data.user;
   };
 
   const register = async (email, password, firstName, lastName) => {
-    const res = await api().post('/auth/register', { email, password, first_name: firstName, last_name: lastName });
-    localStorage.setItem('token', res.data.token);
-    setToken(res.data.token);
-    setUser(res.data.user);
-    return res.data.user;
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          first_name: firstName,
+          last_name: lastName,
+          role: 'student'
+        }
+      }
+    });
+
+    if (error) throw error;
+
+    // Créer l'application vide pour l'étudiant
+    if (data.user) {
+      const { error: appError } = await supabase
+        .from('applications')
+        .insert({
+          user_id: data.user.id,
+          status: 'Nouveau'
+        });
+
+      if (appError) console.error('Error creating application:', appError);
+    }
+
+    return data;
   };
 
-  const logout = () => {
-    localStorage.removeItem('token');
-    setToken(null);
+  const login = async (email, password) => {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    });
+
+    if (error) throw error;
+    return data;
+  };
+
+  const logout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
     setUser(null);
+    setProfile(null);
   };
 
-  return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, logout, api: api() }}>
-      {children}
-    </AuthContext.Provider>
-  );
-}
+  const value = {
+    user,
+    profile,
+    loading,
+    register,
+    login,
+    logout,
+    isAdmin: profile?.role === 'admin',
+    isStudent: profile?.role === 'student'
+  };
 
-export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be inside AuthProvider');
-  return ctx;
-}
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+};

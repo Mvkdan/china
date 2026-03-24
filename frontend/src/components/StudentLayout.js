@@ -1,18 +1,17 @@
 import React from "react";
 import { useAuth } from "@/lib/auth";
 import { useNavigate, Link, useLocation } from "react-router-dom";
-import { LogOut, FileText, Upload, CreditCard, LayoutDashboard, GraduationCap } from "lucide-react";
+import { LogOut, FileText, Upload, LayoutDashboard, GraduationCap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const NAV_ITEMS = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Tableau de bord" },
   { to: "/application", icon: FileText, label: "Candidature" },
   { to: "/documents", icon: Upload, label: "Documents" },
-  { to: "/payment", icon: CreditCard, label: "Paiement" },
 ];
 
 export function StudentLayout({ children }) {
-  const { user, logout } = useAuth();
+  const { profile, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -45,7 +44,7 @@ export function StudentLayout({ children }) {
             })}
           </nav>
           <div className="flex items-center gap-3">
-            <span className="text-sm font-medium" style={{ color: '#525A61' }}>{user?.first_name}</span>
+            <span className="text-sm font-medium" style={{ color: '#525A61' }}>{profile?.first_name}</span>
             <Button variant="ghost" size="sm" onClick={handleLogout} data-testid="logout-button" className="text-slate-500 hover:text-red-600">
               <LogOut className="h-4 w-4" />
             </Button>

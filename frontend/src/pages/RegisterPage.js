@@ -18,9 +18,9 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       await register(form.email, form.password, form.firstName, form.lastName);
-      toast.success("Compte créé avec succès !");
+      toast.success("Compte créé avec succès ! Vérifiez votre email pour confirmer.");
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Erreur lors de l'inscription");
+      toast.error(err.message || "Erreur lors de l'inscription");
     } finally {
       setLoading(false);
     }

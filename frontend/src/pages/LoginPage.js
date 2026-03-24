@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useAuth } from "@/lib/auth";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -9,6 +9,7 @@ import { LogIn, Mail, Lock } from "lucide-react";
 
 export default function LoginPage() {
   const { login } = useAuth();
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -19,8 +20,9 @@ export default function LoginPage() {
     try {
       await login(email, password);
       toast.success("Connexion réussie !");
+      navigate("/dashboard");
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Erreur de connexion");
+      toast.error(err.message || "Erreur de connexion");
     } finally {
       setLoading(false);
     }
@@ -82,7 +84,7 @@ export default function LoginPage() {
               className="w-full rounded-full text-white font-semibold py-5"
               style={{ backgroundColor: '#1C3530' }}
             >
-              {loading ? <span className="animate-spin mr-2">...</span> : <LogIn className="mr-2 h-4 w-4" />}
+              {loading ? <span className="animate-spin mr-2">⏳</span> : <LogIn className="mr-2 h-4 w-4" />}
               Se connecter
             </Button>
           </form>
