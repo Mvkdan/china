@@ -1,19 +1,53 @@
 import { supabase } from './supabase';
 
 /**
+ * Wrapper pour gérer les erreurs Supabase de manière cohérente
+ */
+const handleSupabaseError = (error, context = '') => {
+  console.error(`Supabase error in ${context}:`, error);
+  
+  // Gérer les erreurs de body stream
+  if (error.message && error.message.includes('body stream')) {
+    console.error('⚠️ Body stream error detected');
+    throw new Error('Erreur de connexion. Veuillez rafraîchir la page.');
+  }
+  
+  // Gérer les erreurs RLS
+  if (error.code === 'PGRST116') {
+    console.error('⚠️ No rows returned - This might be expected');
+    return null;
+  }
+  
+  // Gérer les erreurs de table inexistante
+  if (error.code === '42P01') {
+    console.error('❌ Table does not exist - Please run the SQL setup script');
+    throw new Error('Base de données non configurée. Contactez l\'administrateur.');
+  }
+  
+  throw error;
+};
+
+/**
  * Helpers pour gérer les applications
  */
 export const applicationHelpers = {
   // Récupérer l'application de l'utilisateur
   async getApplication(userId) {
-    const { data, error } = await supabase
-      .from('applications')
-      .select('*')
-      .eq('user_id', userId)
-      .single();
+    try {
+      const { data, error } = await supabase
+        .from('applications')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
 
-    if (error && error.code !== 'PGRST116') throw error;
-    return data;
+      if (error) {
+        return handleSupabaseError(error, 'getApplication');
+      }
+      
+      return data;
+    } catch (error) {
+      return handleSupabaseError(error, 'getApplication');
+    }
   },
 
   // Mettre à jour une étape spécifique
