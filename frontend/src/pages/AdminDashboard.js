@@ -37,11 +37,13 @@ export default function AdminDashboard() {
 
   const loadStudents = async () => {
     try {
+      console.log('Loading students...');
       const data = await adminHelpers.getAllStudents();
-      setStudents(data);
+      console.log('Students loaded:', data);
+      setStudents(data || []);
     } catch (error) {
       console.error('Error loading students:', error);
-      toast.error("Erreur lors du chargement");
+      toast.error("Erreur lors du chargement des étudiants");
     } finally {
       setLoading(false);
     }

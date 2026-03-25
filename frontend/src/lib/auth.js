@@ -11,32 +11,60 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let mounted = true;
+
     // Vérifier la session au chargement
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        setUser(session.user);
-        loadProfile(session.user.id);
-      } else {
-        setLoading(false);
+    const initAuth = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error('Error getting session:', error);
+          if (mounted) setLoading(false);
+          return;
+        }
+
+        if (session?.user) {
+          if (mounted) {
+            setUser(session.user);
+            await loadProfile(session.user.id, mounted);
+          }
+        } else {
+          if (mounted) setLoading(false);
+        }
+      } catch (error) {
+        console.error('Error initializing auth:', error);
+        if (mounted) setLoading(false);
       }
-    });
+    };
+
+    initAuth();
 
     // Écouter les changements d'authentification
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event, session?.user?.email);
+      
       if (session?.user) {
-        setUser(session.user);
-        await loadProfile(session.user.id);
+        if (mounted) {
+          setUser(session.user);
+          await loadProfile(session.user.id, mounted);
+        }
       } else {
-        setUser(null);
-        setProfile(null);
+        if (mounted) {
+          setUser(null);
+          setProfile(null);
+          setLoading(false);
+        }
       }
-      setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
-  const loadProfile = async (userId) => {
+  const loadProfile = async (userId, mounted = true) => {
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -44,12 +72,21 @@ export const AuthProvider = ({ children }) => {
         .eq('id', userId)
         .single();
 
-      if (error) throw error;
-      setProfile(data);
+      if (error) {
+        console.error('Error loading profile:', error);
+        throw error;
+      }
+
+      console.log('Profile loaded:', data);
+      if (mounted) {
+        setProfile(data);
+        setLoading(false);
+      }
     } catch (error) {
-      console.error('Error loading profile:', error);
-    } finally {
-      setLoading(false);
+      console.error('Error in loadProfile:', error);
+      if (mounted) {
+        setLoading(false);
+      }
     }
   };
 

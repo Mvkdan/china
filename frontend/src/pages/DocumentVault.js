@@ -111,7 +111,16 @@ export default function DocumentVault() {
     return documents.filter(d => d.document_type === typeId);
   };
 
-  const canEdit = !application?.status || application?.status === "Nouveau" || application?.status === "Correction_Requise";
+  // Permettre l'upload même après soumission, sauf si le document est déjà approuvé
+  const canUploadDoc = (docType) => {
+    const existingDocs = getDocsForType(docType.id);
+    // Si c'est un doc multiple, toujours permettre
+    if (docType.multiple) return true;
+    // Si pas de doc, permettre
+    if (existingDocs.length === 0) return true;
+    // Si le doc n'est pas approuvé, permettre le remplacement
+    return !existingDocs.some(d => d.status === 'approved');
+  };
 
   if (loading) {
     return (
@@ -134,12 +143,6 @@ export default function DocumentVault() {
             Uploadez tous les documents requis pour votre candidature
           </p>
         </div>
-
-        {!canEdit && (
-          <div className="mb-6 px-4 py-3 rounded-lg text-sm" style={{ backgroundColor: '#FEF3C7', color: '#92400E' }}>
-            Votre candidature a été soumise. Vous ne pouvez plus modifier vos documents sauf si un admin demande des corrections.
-          </div>
-        )}
 
         <div className="space-y-4">
           {DOCUMENT_TYPES.map((docType) => {
@@ -187,7 +190,7 @@ export default function DocumentVault() {
                               >
                                 <Eye className="h-4 w-4" />
                               </Button>
-                              {canEdit && doc.status !== 'approved' && (
+                              {doc.status !== 'approved' && (
                                 <Button
                                   variant="ghost"
                                   size="sm"
@@ -211,7 +214,7 @@ export default function DocumentVault() {
                   </div>
 
                   {/* Bouton Upload */}
-                  {(canEdit && (docType.multiple || !hasDoc)) && (
+                  {canUploadDoc(docType) && (
                     <div>
                       <input
                         type="file"

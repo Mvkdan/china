@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/lib/auth";
 import { applicationHelpers } from "@/lib/helpers";
 import { StudentLayout } from "@/components/StudentLayout";
+import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -400,6 +401,7 @@ function FamilyStep({ data, onChange }) {
 
 export default function ApplicationWizard() {
   const { profile } = useAuth();
+  const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(0);
   const [application, setApplication] = useState(null);
   const [formData, setFormData] = useState({});
@@ -453,13 +455,18 @@ export default function ApplicationWizard() {
   const handlePrev = () => { if (currentStep > 0) setCurrentStep(c => c - 1); };
 
   const handleSubmit = async () => {
-    const step = STEPS[currentStep];
-    await saveStep(step.id, formData[step.id]);
     setSubmitting(true);
     try {
+      // Sauvegarder d'abord la dernière étape
+      const step = STEPS[currentStep];
+      await saveStep(step.id, formData[step.id]);
+      
+      // Puis soumettre
       await applicationHelpers.submitApplication(profile.id);
-      toast.success("Candidature soumise avec succès !");
-      fetchData();
+      toast.success("Informations soumises avec succès ! Vous pouvez maintenant uploader vos documents.");
+      
+      // Rediriger vers la page des documents
+      navigate("/documents");
     } catch (err) {
       console.error('Error submitting application:', err);
       toast.error("Erreur lors de la soumission");
@@ -563,7 +570,8 @@ export default function ApplicationWizard() {
                 <ChevronLeft className="mr-1 h-4 w-4" /> Précédent
               </Button>
               <div className="flex gap-3">
-                {canEdit && (
+                {/* Afficher le bouton sauvegarder sauf à la dernière étape */}
+                {canEdit && currentStep < STEPS.length - 1 && (
                   <Button variant="outline" onClick={() => saveStep(step.id, formData[step.id])} disabled={saving} data-testid="wizard-save-btn" className="rounded-full border-slate-300">
                     <Save className="mr-1 h-4 w-4" /> {saving ? "Sauvegarde..." : "Sauvegarder"}
                   </Button>
@@ -574,7 +582,7 @@ export default function ApplicationWizard() {
                   </Button>
                 ) : canEdit && (!application?.status || application?.status === "Nouveau") ? (
                   <Button onClick={handleSubmit} disabled={submitting || !allStepsComplete} data-testid="wizard-submit-btn" className="rounded-full text-white" style={{ backgroundColor: '#C95B36' }}>
-                    <Send className="mr-1 h-4 w-4" /> {submitting ? "Soumission..." : "Soumettre la candidature"}
+                    <Send className="mr-1 h-4 w-4" /> {submitting ? "Soumission..." : "Soumettre les informations"}
                   </Button>
                 ) : null}
               </div>
