@@ -18,10 +18,7 @@ export const AuthProvider = ({ children }) => {
         if (mounted) setLoading(false);
         return;
       }
-
       try {
-        console.log('Loading profile for user:', userId);
-
         const { data, error } = await supabase
           .from('profiles')
           .select('*')
@@ -31,19 +28,14 @@ export const AuthProvider = ({ children }) => {
         if (!mounted) return;
 
         if (error) {
-          console.error('Error loading profile:', error.message, error.code);
+          console.error('Error loading profile:', error.message);
           setLoading(false);
           return;
         }
 
-        if (!data) {
-          console.warn('No profile found for user:', userId);
-          setLoading(false);
-          return;
+        if (data) {
+          setProfile(data);
         }
-
-        console.log('✅ Profile loaded:', data);
-        setProfile(data);
         setLoading(false);
       } catch (err) {
         console.error('Unexpected error in loadProfile:', err);
@@ -51,11 +43,24 @@ export const AuthProvider = ({ children }) => {
       }
     };
 
-    // onAuthStateChange gère tout : session initiale + login + logout
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state changed:', event, session?.user?.email);
-
+    // Etape 1 : getSession() gere le chargement initial (refresh de page)
+    supabase.auth.getSession().then(({ data: { session } }) => {
       if (!mounted) return;
+      if (session?.user) {
+        setUser(session.user);
+        loadProfile(session.user.id);
+      } else {
+        setLoading(false);
+      }
+    });
+
+    // Etape 2 : onAuthStateChange gere login / logout / token refresh
+    // On ignore INITIAL_SESSION car getSession() s'en occupe deja
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!mounted) return;
+      if (event === 'INITIAL_SESSION') return;
+
+      console.log('Auth event:', event, session?.user?.email);
 
       if (session?.user) {
         setUser(session.user);
@@ -74,25 +79,16 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const register = async (email, password, firstName, lastName) => {
-    console.log('📝 Registering new user:', email);
-
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: {
-          first_name: firstName,
-          last_name: lastName,
-          role: 'student'
-        }
+        data: { first_name: firstName, last_name: lastName, role: 'student' }
       }
     });
 
     if (error) throw error;
 
-    console.log('✅ User registered:', data.user?.email);
-
-    // Attendre que le trigger Supabase crée le profil
     await new Promise(resolve => setTimeout(resolve, 1000));
 
     if (data.user) {
@@ -104,7 +100,6 @@ export const AuthProvider = ({ children }) => {
           .maybeSingle();
 
         if (!profileData) {
-          console.log('Profile not created by trigger, creating manually...');
           await supabase.from('profiles').insert({
             id: data.user.id,
             email,
