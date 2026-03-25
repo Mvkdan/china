@@ -104,49 +104,93 @@ export const applicationHelpers = {
 export const documentHelpers = {
   // Uploader un document
   async uploadDocument(userId, applicationId, file, documentType) {
+    console.log('📤 Starting document upload:', {
+      userId,
+      applicationId,
+      fileName: file.name,
+      fileSize: file.size,
+      documentType
+    });
+
     const fileExt = file.name.split('.').pop();
     const fileName = `${Date.now()}.${fileExt}`;
     const filePath = `${userId}/${documentType}/${fileName}`;
 
-    // Upload vers Supabase Storage
-    const { error: uploadError } = await supabase.storage
-      .from('documents')
-      .upload(filePath, file, {
-        cacheControl: '3600',
-        upsert: false
-      });
+    try {
+      // Upload vers Supabase Storage
+      console.log('📦 Uploading to Storage:', filePath);
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('documents')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
 
-    if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error('❌ Storage upload error:', uploadError);
+        throw uploadError;
+      }
 
-    // Créer l'enregistrement dans la table documents
-    const { data, error } = await supabase
-      .from('documents')
-      .insert({
-        application_id: applicationId,
-        document_type: documentType,
-        file_name: file.name,
-        file_path: filePath,
-        file_size: file.size,
-        content_type: file.type,
-        status: 'pending'
-      })
-      .select()
-      .single();
+      console.log('✅ File uploaded to Storage:', uploadData);
 
-    if (error) throw error;
-    return data;
+      // Créer l'enregistrement dans la table documents
+      console.log('💾 Creating database entry...');
+      const { data, error } = await supabase
+        .from('documents')
+        .insert({
+          application_id: applicationId,
+          document_type: documentType,
+          file_name: file.name,
+          file_path: filePath,
+          file_size: file.size,
+          content_type: file.type,
+          status: 'pending'
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('❌ Database insert error:', error);
+        // Essayer de supprimer le fichier du storage si l'insert échoue
+        try {
+          await supabase.storage.from('documents').remove([filePath]);
+          console.log('🗑️ Cleaned up Storage file after DB error');
+        } catch (cleanupError) {
+          console.error('Failed to cleanup:', cleanupError);
+        }
+        throw error;
+      }
+
+      console.log('✅ Document saved to database:', data);
+      return data;
+    } catch (error) {
+      console.error('❌ Upload failed:', error);
+      throw error;
+    }
   },
 
   // Récupérer tous les documents d'une application
   async getDocuments(applicationId) {
-    const { data, error } = await supabase
-      .from('documents')
-      .select('*')
-      .eq('application_id', applicationId)
-      .order('uploaded_at', { ascending: false });
+    console.log('📄 Fetching documents for application:', applicationId);
+    
+    try {
+      const { data, error } = await supabase
+        .from('documents')
+        .select('*')
+        .eq('application_id', applicationId)
+        .order('uploaded_at', { ascending: false });
 
-    if (error) throw error;
-    return data;
+      if (error) {
+        console.error('❌ Error fetching documents:', error);
+        throw error;
+      }
+
+      console.log(`✅ Found ${data?.length || 0} documents`);
+      return data || [];
+    } catch (error) {
+      console.error('❌ getDocuments failed:', error);
+      throw error;
+    }
   },
 
   // Obtenir l'URL signée d'un document
@@ -184,6 +228,8 @@ export const documentHelpers = {
 export const notificationHelpers = {
   // Créer une notification
   async create(userId, title, message, type = 'info') {
+    console.log('📬 Creating notification:', { userId, title, type });
+    
     const { data, error } = await supabase
       .from('notifications')
       .insert({
@@ -195,8 +241,23 @@ export const notificationHelpers = {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('❌ Error creating notification:', error);
+      throw error;
+    }
+    
+    console.log('✅ Notification created:', data);
     return data;
+  },
+
+  // Demander une correction de document
+  async requestCorrection(userId, documentType, message) {
+    return this.create(
+      userId,
+      'Correction requise',
+      `Document "${documentType}" : ${message}`,
+      'warning'
+    );
   },
 
   // Marquer comme lu

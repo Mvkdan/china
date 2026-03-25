@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
-import { adminHelpers, universityHelpers, documentHelpers } from "@/lib/helpers";
+import { adminHelpers, universityHelpers, documentHelpers, notificationHelpers } from "@/lib/helpers";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import {
-  ArrowLeft, GraduationCap, CheckCircle2, XCircle, Clock, Eye, Plus, X, Copy
+  ArrowLeft, GraduationCap, CheckCircle2, XCircle, Clock, Eye, Plus, X, Copy, MessageSquare
 } from "lucide-react";
 
 const STATUS_MAP = {
@@ -35,6 +36,11 @@ export default function AdminStudentDetail() {
   const [selectedUni, setSelectedUni] = useState("");
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // Pour le dialogue de correction
+  const [correctionDialog, setCorrectionDialog] = useState(false);
+  const [selectedDocument, setSelectedDocument] = useState(null);
+  const [correctionMessage, setCorrectionMessage] = useState("");
 
   useEffect(() => {
     loadData();
@@ -116,10 +122,49 @@ export default function AdminStudentDetail() {
     try {
       await adminHelpers.updateDocumentStatus(docId, action, feedback, profile.id);
       toast.success(`Document ${action === "approved" ? "approuvé" : "rejeté"}`);
+      
+      // Si rejet avec feedback, envoyer une notification
+      if (action === "rejected" && feedback) {
+        const doc = documents.find(d => d.id === docId);
+        if (doc) {
+          await notificationHelpers.requestCorrection(
+            student.id,
+            doc.document_type.replace(/_/g, ' '),
+            feedback
+          );
+          toast.success("Notification envoyée à l'étudiant");
+        }
+      }
+      
       await loadData();
     } catch (error) {
       console.error("Error updating document:", error);
       toast.error("Erreur lors de la mise à jour");
+    }
+  };
+
+  const handleRequestCorrection = (doc) => {
+    setSelectedDocument(doc);
+    setCorrectionMessage("");
+    setCorrectionDialog(true);
+  };
+
+  const handleSendCorrectionRequest = async () => {
+    if (!correctionMessage.trim()) {
+      toast.error("Veuillez saisir un message");
+      return;
+    }
+
+    try {
+      // Rejeter le document avec le feedback
+      await handleDocumentAction(selectedDocument.id, "rejected", correctionMessage);
+      
+      setCorrectionDialog(false);
+      setSelectedDocument(null);
+      setCorrectionMessage("");
+    } catch (error) {
+      console.error("Error sending correction request:", error);
+      toast.error("Erreur lors de l'envoi");
     }
   };
 
@@ -281,15 +326,12 @@ export default function AdminStudentDetail() {
                                 </Button>
                                 <Button
                                   size="sm"
-                                  variant="destructive"
-                                  onClick={() => {
-                                    const feedback = prompt("Raison du rejet:");
-                                    if (feedback) handleDocumentAction(doc.id, "rejected", feedback);
-                                  }}
-                                  className="h-8 rounded-full"
+                                  onClick={() => handleRequestCorrection(doc)}
+                                  className="h-8 rounded-full text-white"
+                                  style={{ backgroundColor: "#DC2626" }}
                                   data-testid={`reject-doc-${doc.id}`}
                                 >
-                                  <XCircle className="h-4 w-4" />
+                                  <MessageSquare className="h-4 w-4" />
                                 </Button>
                               </>
                             )}
@@ -396,6 +438,57 @@ export default function AdminStudentDetail() {
           </div>
         </div>
       </main>
+
+      {/* Dialogue de demande de correction */}
+      <Dialog open={correctionDialog} onOpenChange={setCorrectionDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Demander une correction</DialogTitle>
+            <DialogDescription>
+              Expliquez pourquoi ce document nécessite une correction. L'étudiant recevra une notification.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div>
+              <p className="text-sm font-semibold mb-2" style={{ color: "#1A2024" }}>
+                Document : {selectedDocument?.document_type.replace(/_/g, ' ')}
+              </p>
+              <p className="text-xs" style={{ color: "#525A61" }}>
+                Fichier : {selectedDocument?.file_name}
+              </p>
+            </div>
+            
+            <div>
+              <label className="text-sm font-medium mb-2 block" style={{ color: "#1A2024" }}>
+                Message de correction
+              </label>
+              <Textarea
+                placeholder="Ex: La photo n'est pas sur fond blanc. Veuillez soumettre une nouvelle photo conforme."
+                value={correctionMessage}
+                onChange={(e) => setCorrectionMessage(e.target.value)}
+                rows={4}
+                className="w-full"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCorrectionDialog(false)}>
+              Annuler
+            </Button>
+            <Button 
+              onClick={handleSendCorrectionRequest}
+              disabled={!correctionMessage.trim()}
+              className="text-white"
+              style={{ backgroundColor: "#DC2626" }}
+            >
+              <MessageSquare className="h-4 w-4 mr-2" />
+              Envoyer la demande
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
