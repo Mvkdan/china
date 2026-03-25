@@ -9,7 +9,7 @@ import StudentDashboard from "@/pages/StudentDashboard";
 import ApplicationWizard from "@/pages/ApplicationWizard";
 import DocumentVault from "@/pages/DocumentVault";
 import AdminDashboard from "@/pages/AdminDashboard";
-import AdminStudentDetail from "@/pages/AdminStudentDetail";
+import AdminStudentDetailEnhanced from "@/pages/AdminStudentDetailEnhanced";
 
 function ProtectedRoute({ children, adminOnly = false }) {
   const { profile, loading } = useAuth();
@@ -38,7 +38,7 @@ function App() {
           <Route path="/application" element={<ProtectedRoute><ApplicationWizard /></ProtectedRoute>} />
           <Route path="/documents" element={<ProtectedRoute><DocumentVault /></ProtectedRoute>} />
           <Route path="/admin" element={<ProtectedRoute adminOnly><AdminDashboard /></ProtectedRoute>} />
-          <Route path="/admin/student/:studentId" element={<ProtectedRoute adminOnly><AdminStudentDetail /></ProtectedRoute>} />
+          <Route path="/admin/student/:studentId" element={<ProtectedRoute adminOnly><AdminStudentDetailEnhanced /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </BrowserRouter>

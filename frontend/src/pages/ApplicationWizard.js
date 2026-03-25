@@ -481,7 +481,8 @@ export default function ApplicationWizard() {
 
   if (loading) return <StudentLayout><div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1C3530]"></div></div></StudentLayout>;
 
-  const canEdit = !application?.status || application?.status === "Nouveau" || application?.status === "Correction_Requise";
+  // Toujours permettre l'édition (sauf si admis)
+  const canEdit = application?.status !== "Admis";
   const step = STEPS[currentStep];
   const completedSteps = application?.completed_steps || [];
   const allStepsComplete = STEPS.every(s => completedSteps.includes(s.id));
